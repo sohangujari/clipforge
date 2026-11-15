@@ -1,0 +1,9 @@
+{
+  "name": "clipforge",
+  "private": true,
+  "scripts": {
+    "setup": "npm --prefix web ci && npm --prefix web run db:push",
+    "dev": "npm --prefix web run dev",
+    "test": "npm --prefix web test"
+  }
+}

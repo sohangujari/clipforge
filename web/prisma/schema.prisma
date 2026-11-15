@@ -1,0 +1,23 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../lib/generated/prisma"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+model Provider {
+  kind      String   @id
+  baseUrl   String?
+  apiKeyEnc String?
+  enabled   Boolean  @default(false)
+  updatedAt DateTime @updatedAt
+}
+
+/// value is JSON
+model Setting {
+  key       String   @id
+  value     String
+  updatedAt DateTime @updatedAt
+}
