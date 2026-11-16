@@ -16,6 +16,9 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: LayoutProps<'/'>) {
   return (
     <html lang="en" suppressHydrationWarning className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}>
+      {/* Bundled subtitle fonts as plain CSS (kept out of the Tailwind pipeline; its url() handling hung the production build) */}
+      {/* eslint-disable-next-line @next/next/no-css-tags -- a static file on purpose (see above) */}
+      <link rel="stylesheet" href="/fonts/fonts.css" precedence="default" />
       <body className="min-h-full flex flex-col bg-background">
         <ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange>
           <TooltipProvider>{children}</TooltipProvider>

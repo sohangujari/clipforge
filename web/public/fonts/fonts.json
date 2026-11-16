@@ -1,0 +1,128 @@
+[
+  {
+    "family": "Anton",
+    "weight": 400,
+    "file": "anton-400.ttf",
+    "assName": "Anton",
+    "bold": false
+  },
+  {
+    "family": "Bebas Neue",
+    "weight": 400,
+    "file": "bebas-neue-400.ttf",
+    "assName": "Bebas Neue",
+    "bold": false
+  },
+  {
+    "family": "Courier Prime",
+    "weight": 700,
+    "file": "courier-prime-700.ttf",
+    "assName": "Courier Prime",
+    "bold": true
+  },
+  {
+    "family": "Geist",
+    "weight": 500,
+    "file": "geist-500.ttf",
+    "assName": "Geist Medium",
+    "bold": false
+  },
+  {
+    "family": "Geist",
+    "weight": 600,
+    "file": "geist-600.ttf",
+    "assName": "Geist SemiBold",
+    "bold": false
+  },
+  {
+    "family": "Geist",
+    "weight": 700,
+    "file": "geist-700.ttf",
+    "assName": "Geist",
+    "bold": true
+  },
+  {
+    "family": "Inter",
+    "weight": 400,
+    "file": "inter-400.ttf",
+    "assName": "Inter",
+    "bold": false
+  },
+  {
+    "family": "Inter",
+    "weight": 600,
+    "file": "inter-600.ttf",
+    "assName": "Inter SemiBold",
+    "bold": false
+  },
+  {
+    "family": "Inter",
+    "weight": 700,
+    "file": "inter-700.ttf",
+    "assName": "Inter",
+    "bold": true
+  },
+  {
+    "family": "Inter",
+    "weight": 900,
+    "file": "inter-900.ttf",
+    "assName": "Inter Black",
+    "bold": false
+  },
+  {
+    "family": "Montserrat",
+    "weight": 600,
+    "file": "montserrat-600.ttf",
+    "assName": "Montserrat Thin SemiBold",
+    "bold": false
+  },
+  {
+    "family": "Montserrat",
+    "weight": 800,
+    "file": "montserrat-800.ttf",
+    "assName": "Montserrat Thin ExtraBold",
+    "bold": false
+  },
+  {
+    "family": "Montserrat",
+    "weight": 900,
+    "file": "montserrat-900.ttf",
+    "assName": "Montserrat Thin Black",
+    "bold": false
+  },
+  {
+    "family": "Noto Sans Devanagari",
+    "weight": 400,
+    "file": "noto-sans-devanagari-400.ttf",
+    "assName": "Noto Sans Devanagari",
+    "bold": false
+  },
+  {
+    "family": "Noto Sans Devanagari",
+    "weight": 700,
+    "file": "noto-sans-devanagari-700.ttf",
+    "assName": "Noto Sans Devanagari",
+    "bold": true
+  },
+  {
+    "family": "Poppins",
+    "weight": 600,
+    "file": "poppins-600.ttf",
+    "assName": "Poppins SemiBold",
+    "bold": false
+  },
+  {
+    "family": "Poppins",
+    "weight": 700,
+    "file": "poppins-700.ttf",
+    "assName": "Poppins",
+    "bold": true
+  },
+  {
+    "family": "Poppins",
+    "weight": 800,
+    "file": "poppins-800.ttf",
+    "assName": "Poppins ExtraBold",
+    "bold": false
+  }
+]

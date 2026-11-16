@@ -88,3 +88,16 @@ def test_local_models_get_a_small_taste_sample(conn, data_dir, clips, monkeypatc
     assert len(ex["kept"]) <= 2 and all(len(s) <= 200 for s in ex["kept"])
     assert pid
     assert json.dumps(ex)
+
+
+def test_find_clips_again_keeps_clips_you_edited(conn, data_dir, clips, monkeypatch):
+    pid = setup(conn, data_dir, clips)
+    monkeypatch.setattr(A, "call_llm_ex", FakeLLM())
+    A.run(ctx_for(conn))
+    first = clips_of(conn, pid)[0]
+    conn.execute("UPDATE Clip SET edit='{}' WHERE id=?", (first["id"],))
+    rerun(conn)
+    out = clips_of(conn, pid)
+    assert first["id"] in {c["id"] for c in out}
+    others = [c for c in out if c["id"] != first["id"]]
+    assert all(c["endSec"] <= first["startSec"] or c["startSec"] >= first["endSec"] for c in others)  # and it isn't found twice

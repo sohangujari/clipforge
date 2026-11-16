@@ -8,4 +8,8 @@ export interface PanelProps {
   clip: MockClip
   clips: MockClip[]
   preview: React.ReactNode
+  /** A real clip (not Phase 1 mock data): only layouts the export can render are enabled. */
+  real?: boolean
+  /** Saves the current edit now (before an export, so it renders exactly what the preview shows). */
+  saveEdit?: () => Promise<void>
 }

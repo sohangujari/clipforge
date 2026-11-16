@@ -3,22 +3,31 @@ import { Field, Section } from '@/components/cf/Field'
 import { LayoutThumb } from '@/components/cf/LayoutThumb'
 import { PanelPreview } from '@/components/cf/PanelPreview'
 import { Segmented } from '@/components/cf/Segmented'
-import { layoutsFor } from '@/lib/layouts'
+import { LAYOUTS, layoutsFor } from '@/lib/layouts'
 import { cn } from '@/lib/utils'
 import type { PanelProps } from './types'
 
-export function LayoutPanel({ state, set, project, preview }: PanelProps) {
+/** Layouts the export renders today, and the phase that brings each of the others (they need speaker/facecam/screen detection). */
+const SOON: Partial<Record<string, number>> = { 'active-speaker': 6, split: 6, grid: 6, 'facecam-top': 7, 'facecam-bottom': 7, pip: 7, 'gameplay-only': 7, 'reaction-stack': 7, 'screen-zoom': 8 }
+
+export function LayoutPanel({ state, set, project, preview, real }: PanelProps) {
   return (
     <div className="flex flex-col gap-6">
       <Section title={`Layouts for ${project.contentType}`}>
         <div className="grid grid-cols-3 gap-2">
-          {layoutsFor(project.contentType).map((l) => (
-            <button key={l.id} type="button" data-testid="layout-card" data-layout={l.id} aria-pressed={state.layoutId === l.id} onClick={() => set({ layoutId: l.id })}
-              className={cn('flex flex-col items-center gap-1.5 rounded-xl p-2 transition-all duration-150', state.layoutId === l.id ? 'bg-card shadow-cf ring-2 ring-cf-accent' : 'hover:bg-card/60')}>
-              <LayoutThumb layout={l} className="w-full" />
-              <span className="text-center text-[11px] font-medium leading-tight">{l.label}</span>
-            </button>
-          ))}
+          {(real ? [...LAYOUTS.filter((l) => !SOON[l.id] && !layoutsFor(project.contentType).includes(l)), ...layoutsFor(project.contentType)] : layoutsFor(project.contentType)).map((l) => {
+            const soon = real ? SOON[l.id] : undefined
+            return (
+              <button key={l.id} type="button" data-testid="layout-card" data-layout={l.id} aria-pressed={state.layoutId === l.id} disabled={!!soon}
+                onClick={() => set({ layoutId: l.id })}
+                className={cn('flex flex-col items-center gap-1.5 rounded-xl p-2 transition-all duration-150 disabled:cursor-not-allowed disabled:opacity-50',
+                  state.layoutId === l.id ? 'bg-card shadow-cf ring-2 ring-cf-accent' : 'hover:bg-card/60')}>
+                <LayoutThumb layout={l} className="w-full" />
+                <span className="text-center text-[11px] font-medium leading-tight">{l.label}</span>
+                {soon && <span className="text-center text-[10px] leading-tight text-muted-foreground">Coming in Phase {soon}</span>}
+              </button>
+            )
+          })}
         </div>
       </Section>
       <Section title="Platform safe zones">

@@ -1,0 +1,21 @@
+[Script Info]
+ScriptType: v4.00+
+PlayResX: 1080
+PlayResY: 1920
+WrapStyle: 0
+ScaledBorderAndShadow: yes
+YCbCr Matrix: None
+
+[V4+ Styles]
+Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
+Style: Default,Bebas Neue,76,&H003FD2FF,&H005B5EFF,&H00171B2B,&H00171B2B,0,0,0,0,100,100,0,0,1,5,0,5,54,54,0,1
+
+[Events]
+Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
+Dialogue: 0,0:00:00.00,0:00:00.45,Default,,0,0,0,,{\pos(540,1382)\xshad5\yshad5}{\1c&H5B5EFF&}SO{\1c&H3FD2FF&} WE SET
+Dialogue: 0,0:00:00.45,0:00:00.90,Default,,0,0,0,,{\pos(540,1382)\xshad5\yshad5}SO {\1c&H5B5EFF&}WE{\1c&H3FD2FF&} SET
+Dialogue: 0,0:00:00.90,0:00:01.35,Default,,0,0,0,,{\pos(540,1382)\xshad5\yshad5}SO WE {\1c&H5B5EFF&}SET{\1c&H3FD2FF&}
+Dialogue: 0,0:00:01.35,0:00:02.60,Default,,0,0,0,,{\pos(540,1382)\xshad5\yshad5}{\1c&H5B5EFF&}UP{\1c&H3FD2FF&} BLIND DATES
+Dialogue: 0,0:00:02.60,0:00:03.05,Default,,0,0,0,,{\pos(540,1382)\xshad5\yshad5}UP {\1c&H5B5EFF&}BLIND{\1c&H3FD2FF&} DATES
+Dialogue: 0,0:00:03.05,0:00:03.50,Default,,0,0,0,,{\pos(540,1382)\xshad5\yshad5}UP BLIND {\1c&H5B5EFF&}DATES{\1c&H3FD2FF&}
+Dialogue: 0,0:00:03.50,0:00:03.90,Default,,0,0,0,,{\pos(540,1382)\xshad5\yshad5}{\1c&H5B5EFF&}(REALLY){\1c&H3FD2FF&}

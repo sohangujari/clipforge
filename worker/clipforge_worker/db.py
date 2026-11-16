@@ -48,7 +48,8 @@ def claim_next_job(conn) -> Job | None:
     ).fetchone()
     if not r:
         return None
-    conn.execute("UPDATE Project SET status='processing', updatedAt=? WHERE id=?", (now_iso(), r[1]))
+    if r[6] != "render":  # exporting doesn't take the project away from the user
+        conn.execute("UPDATE Project SET status='processing', updatedAt=? WHERE id=?", (now_iso(), r[1]))
     return Job(r[0], r[1], r[2], r[3], json.loads(r[4] or "[]"), r[5], r[6] or "ingest", json.loads(r[7]) if r[7] else {})
 
 
@@ -74,6 +75,8 @@ def mark_stage_done(conn, job_id: str, stage: str) -> None:
 def _end(conn, job_id: str, job_status: str, project_status: str, error: str | None = None) -> None:
     pid, jtype = conn.execute("SELECT projectId, type FROM Job WHERE id=?", (job_id,)).fetchone()
     conn.execute("UPDATE Job SET status=?, error=?, message=NULL, updatedAt=? WHERE id=?", (job_status, error, now_iso(), job_id))
+    if jtype == "render":
+        return  # the export's result lives on the job; the project's status and warning are untouched
     if jtype != "ingest" and project_status != "ready":
         # a failed/cancelled Find clips or Search leaves the transcript and existing clips usable
         conn.execute("UPDATE Project SET status='ready', warning=COALESCE(?, warning), updatedAt=? WHERE id=?", (error, now_iso(), pid))

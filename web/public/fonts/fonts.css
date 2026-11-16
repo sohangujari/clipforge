@@ -1,0 +1,19 @@
+/* Bundled subtitle fonts (web/public/fonts) — the same files libass uses for the preview and the export. */
+@font-face { font-family: 'Anton'; src: url('/fonts/anton-400.ttf') format('truetype'); font-weight: 400; font-display: swap; }
+@font-face { font-family: 'Bebas Neue'; src: url('/fonts/bebas-neue-400.ttf') format('truetype'); font-weight: 400; font-display: swap; }
+@font-face { font-family: 'Courier Prime'; src: url('/fonts/courier-prime-700.ttf') format('truetype'); font-weight: 700; font-display: swap; }
+@font-face { font-family: 'Geist'; src: url('/fonts/geist-500.ttf') format('truetype'); font-weight: 500; font-display: swap; }
+@font-face { font-family: 'Geist'; src: url('/fonts/geist-600.ttf') format('truetype'); font-weight: 600; font-display: swap; }
+@font-face { font-family: 'Geist'; src: url('/fonts/geist-700.ttf') format('truetype'); font-weight: 700; font-display: swap; }
+@font-face { font-family: 'Inter'; src: url('/fonts/inter-400.ttf') format('truetype'); font-weight: 400; font-display: swap; }
+@font-face { font-family: 'Inter'; src: url('/fonts/inter-600.ttf') format('truetype'); font-weight: 600; font-display: swap; }
+@font-face { font-family: 'Inter'; src: url('/fonts/inter-700.ttf') format('truetype'); font-weight: 700; font-display: swap; }
+@font-face { font-family: 'Inter'; src: url('/fonts/inter-900.ttf') format('truetype'); font-weight: 900; font-display: swap; }
+@font-face { font-family: 'Montserrat'; src: url('/fonts/montserrat-600.ttf') format('truetype'); font-weight: 600; font-display: swap; }
+@font-face { font-family: 'Montserrat'; src: url('/fonts/montserrat-800.ttf') format('truetype'); font-weight: 800; font-display: swap; }
+@font-face { font-family: 'Montserrat'; src: url('/fonts/montserrat-900.ttf') format('truetype'); font-weight: 900; font-display: swap; }
+@font-face { font-family: 'Noto Sans Devanagari'; src: url('/fonts/noto-sans-devanagari-400.ttf') format('truetype'); font-weight: 400; font-display: swap; }
+@font-face { font-family: 'Noto Sans Devanagari'; src: url('/fonts/noto-sans-devanagari-700.ttf') format('truetype'); font-weight: 700; font-display: swap; }
+@font-face { font-family: 'Poppins'; src: url('/fonts/poppins-600.ttf') format('truetype'); font-weight: 600; font-display: swap; }
+@font-face { font-family: 'Poppins'; src: url('/fonts/poppins-700.ttf') format('truetype'); font-weight: 700; font-display: swap; }
+@font-face { font-family: 'Poppins'; src: url('/fonts/poppins-800.ttf') format('truetype'); font-weight: 800; font-display: swap; }

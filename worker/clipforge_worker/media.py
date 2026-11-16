@@ -23,11 +23,15 @@ def probe(path: Path) -> dict:
     info = json.loads(out.stdout)
     streams = info.get("streams", [])
     video = next((s for s in streams if s.get("codec_type") == "video"), None)
+    w, h = (int(video["width"]), int(video["height"])) if video else (0, 0)
+    rotation = next((int(d.get("rotation", 0)) for d in (video or {}).get("side_data_list", []) if "rotation" in d), 0)
+    if rotation % 180:  # phone videos: FFmpeg decodes them upright, so report the upright size
+        w, h = h, w
     return {
         "duration": float(info.get("format", {}).get("duration") or 0),
         "has_audio": any(s.get("codec_type") == "audio" for s in streams),
-        "width": int(video["width"]) if video else 0,
-        "height": int(video["height"]) if video else 0,
+        "width": w,
+        "height": h,
     }
 
 

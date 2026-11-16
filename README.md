@@ -2,7 +2,7 @@
 
 Local-first AI video clipping. ClipForge turns long videos into short vertical clips with animated subtitles, your branding, a viral score, and AI-written titles. It runs entirely on your own device: there's no account and no cloud, and you bring your own AI keys or use a free local model through Ollama.
 
-> **Status: Phase 3 of 8.** Paste a link or upload a file, and ClipForge transcribes it on your device and **finds clips**. Clips start and end on full sentences, laughter and applause in the audio count as evidence, and every clip has a viral score with a reason per dimension, 3 titles, platform descriptions and hashtags. You can search for moments in plain language, and keep or delete clips to teach it your taste. Rendering finished videos arrives in Phase 4 (see the [roadmap](#roadmap)).
+> **Status: Phase 4a of 8.** Paste a link or upload a file, and ClipForge transcribes it on your device, **finds clips** and **exports them as vertical videos**: a face-tracked crop that follows camera cuts, animated subtitles in 10 styles, your logo or @handle, MP4 at 1080p or 720p, or every clip as a ZIP. The editor preview uses the same subtitle engine (libass) and fonts as the export, so what you see is what you get. Filler-word and silence removal, auto-zoom and intro/outro arrive in Phase 4b (see the [roadmap](#roadmap)).
 
 ## Requirements
 
@@ -66,6 +66,16 @@ On the clips page you can:
 
 Videos transcribed before an AI model was set get a **Find clips** button on their transcript page.
 
+## Editing and exporting
+
+Open a clip to edit it. The editor plays your video cropped the way it will be exported, with the subtitles drawn by **libass**, the same subtitle engine FFmpeg uses, and the same font files, so the preview matches the MP4. Your choices (aspect ratio, layout, subtitle style, watermark, trim) are saved with each clip as you go.
+
+- **Layouts:** *Single speaker* (a 9:16 crop that follows the face, holds still through small movements and jumps cleanly at camera cuts) and *Wide + blur* (the whole frame over a blurred fill). Speaker and gaming layouts arrive in Phases 6 and 7.
+- **Export clip** (editor or clip details) renders an MP4 from the original video with the Mac's hardware encoder; **Download all (ZIP)** on the clips page renders every clip. Finished files are in `data/renders/`.
+- **SVG logos** are converted to PNG in your browser when you upload them (FFmpeg can't read SVG).
+
+Measured on an 8 GB M3 with the 12-minute podcast: finding faces and camera cuts takes ~20 s once per video; each 60–90 s clip renders at 1080p in ~10 s; memory stayed above 50% free (worker + FFmpeg peaked at ~470 MB). Files are ~8 Mbit/s (about 60 MB per minute).
+
 ### Which AI model?
 
 Clip quality depends on the model. Measured on an 8 GB M3 with a 12-minute podcast:
@@ -118,6 +128,8 @@ If Settings says *"Ollama isn't running"*, start it with `ollama serve`, then cl
 ## Credits
 
 - Reaction detection uses [YAMNet](https://github.com/tensorflow/models/tree/master/research/audioset/yamnet) (Apache-2.0), in the ONNX export `andrelgomes/yamnet-onnx`. The class map `worker/clipforge_worker/assets/yamnet_class_map.csv` comes from tensorflow/models (Apache-2.0).
+- Face tracking for the vertical crop uses [MediaPipe](https://github.com/google-ai-edge/mediapipe) (Apache-2.0) with its BlazeFace short-range model, downloaded once to `data/models/`.
+- Subtitle fonts (Montserrat, Anton, Inter, Poppins, Courier Prime, Bebas Neue, Geist, Noto Sans Devanagari) are under the SIL Open Font License; see `web/public/fonts/licenses/`.
 
 ## Development
 
@@ -126,6 +138,7 @@ npm test                                    # web unit tests (Vitest) + worker t
 CLIPFORGE_SLOW=1 uv run --directory worker pytest -q   # + a real transcription with whisper-tiny
 npm --prefix web run e2e                    # browser tests incl. a real upload → transcript (temp data dir)
 npm --prefix web run build                  # production build
+npm --prefix web run ass:fixtures           # after changing the subtitle generator: regenerate shared/ass-fixtures (both generators are tested against them)
 ```
 
 Code lives in `web/` (Next.js 16, App Router, Tailwind 4, shadcn/ui) and `worker/` (Python 3.12: yt-dlp, FFmpeg, mlx-whisper).
@@ -135,7 +148,7 @@ Code lives in `web/` (Next.js 16, App Router, Tailwind 4, shadcn/ui) and `worker
 1. ✅ UI shell + settings (AI providers, brand kit, presets, defaults)
 2. ✅ Import (upload, YouTube/Twitch/Kick/Vimeo) + transcription on the GPU, custom words, Hinglish
 3. ✅ Best-in-class clip finding: clean clip boundaries, laughter/applause + AI signals, plain-language clip search, a viral score you can trust that learns your taste, titles, descriptions, hashtags
-4. Rendering: face-tracked crops, burned-in subtitles, watermark, intro/outro, filler-word and silence removal, auto-zoom, export
+4. ✅ **4a** Export: face-tracked crops, burned-in subtitles matching the preview, watermark, MP4/ZIP · **4b** filler-word and silence removal, auto-zoom, AI hook line, intro/outro
 5. Full editor: edit by transcript, frame-precise trims, subtitle designer, layout switcher
 6. Podcast modes: speaker detection, active-speaker/split/grid layouts, layout templates
 7. Gaming: facecam detection, gaming layouts, HUD safe zones, chat spikes

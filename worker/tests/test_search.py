@@ -56,7 +56,7 @@ def test_search_no_match_warns_and_creates_nothing(conn, data_dir, clips, monkey
 
 def test_analyze_job_runs_only_signals_and_analyzing():
     job = db.Job("j", "p", "queued", None, [], 0.0, "analyze", {})
-    assert list(stages_for(job)) == ["signals", "analyzing"]
+    assert list(stages_for(job)) == ["signals", "faces", "analyzing"]
     assert list(stages_for(db.Job("j", "p", "queued", None, [], 0.0, "ingest", {})))[:2] == ["importing", "preparing"]
 
 

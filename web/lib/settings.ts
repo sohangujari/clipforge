@@ -3,7 +3,8 @@ import { z } from 'zod'
 import { getDb } from './db'
 import { PROVIDER_KINDS } from './ai/types'
 import { SubtitleStyleSchema } from './subtitle-presets'
-import { CONTENT_TYPES, POSITIONS, TONES } from './constants'
+import { BrandKitSchema } from './brand-kit'
+import { CONTENT_TYPES, TONES } from './constants'
 
 /** Names and brand words fed to Whisper's prompt. Trimmed, empties dropped, ≤ 50 × 40 chars. */
 export const VocabularySchema = z.array(z.string()).transform((a) => a.map((w) => w.trim()).filter(Boolean)).pipe(z.array(z.string().max(40)).max(50))
@@ -15,18 +16,7 @@ const taskModel = z.object({ provider: z.enum(PROVIDER_KINDS), model: z.string()
 export const schemas = {
   aiTasks: z.object({ highlight: taskModel, scoring: taskModel, titles: taskModel, vision: taskModel })
     .default({ highlight: null, scoring: null, titles: null, vision: null }),
-  brandKit: z.object({
-    logoPath: z.string().optional(),
-    position: z.enum(POSITIONS).default('br'),
-    opacity: z.number().min(0).max(100).default(80),
-    sizePct: z.number().min(2).max(40).default(12),
-    marginPct: z.number().min(0).max(15).default(4),
-    text: z.object({
-      value: z.string().max(60), font: z.string().default('Geist'), color: z.string().default('#FFFFFF'), opacity: z.number().min(0).max(100).default(70),
-    }).optional(),
-    introPath: z.string().optional(),
-    outroPath: z.string().optional(),
-  }).default({ position: 'br', opacity: 80, sizePct: 12, marginPct: 4 }),
+  brandKit: BrandKitSchema,
   subtitlePresets: z.object({ custom: z.array(SubtitleStyleSchema).default([]), defaultId: z.string().default('bold-pop') })
     .default({ custom: [], defaultId: 'bold-pop' }),
   defaults: z.object({

@@ -1,4 +1,9 @@
 'use client'
+import { useMemo, type RefObject } from 'react'
+import { AssOverlay } from '@/components/cf/AssOverlay'
+import { ClipVideo, type RealLayout } from '@/components/cf/ClipVideo'
+import { buildAss } from '@/lib/ass'
+import { outputSize, type Keyframe } from '@/lib/reframe'
 import { ASPECT_RATIO, chunkAt, type EditorState, type SafeZone } from '@/lib/editor'
 import { LAYOUTS, type ThumbRect } from '@/lib/layouts'
 import { positionStyle } from '@/components/cf/PositionGrid'
@@ -29,18 +34,40 @@ function Region({ r, thumbnail }: { r: ThumbRect; thumbnail: string }) {
   )
 }
 
-export function CanvasFrame({ state, t, thumbnail, className, testIds = true }: {
-  state: EditorState; t: number; thumbnail: string; className?: string; testIds?: boolean
+export interface RealMedia { src: string; track: Keyframe[]; playing: boolean; onTime: (t: number) => void; videoRef: RefObject<HTMLVideoElement | null> }
+
+/** The clip-relative ASS for the editor state: same input the export builds (worker render job). */
+export function assFor(state: EditorState): string {
+  const { start, end } = state.trim
+  const b = state.brand
+  const text = state.watermarkOn && !b.logoPath && b.text?.value
+  const { w: width, h: height } = outputSize(state.aspect, '1080p') // libass scales this to the canvas (and to 720p on export)
+  return buildAss({
+    style: state.style, width, height, duration: end - start,
+    words: state.subtitlesOn ? state.words.filter((w) => w.s >= start - 0.05 && w.e <= end + 0.05).map((w) => ({ w: w.w, s: w.s - start, e: w.e - start })) : [],
+    watermarkText: text ? { value: b.text!.value, font: b.text!.font, color: b.text!.color, opacity: (b.opacity * b.text!.opacity) / 100, position: b.position, marginPct: b.marginPct, sizePct: b.sizePct } : null,
+  })
+}
+
+export function CanvasFrame({ state, t, thumbnail, className, testIds = true, real }: {
+  state: EditorState; t: number; thumbnail: string; className?: string; testIds?: boolean; real?: RealMedia
 }) {
   const layout = LAYOUTS.find((l) => l.id === state.layoutId) ?? LAYOUTS[0]
   const chunk = chunkAt(state.words, state.style.wordsPerLine * state.style.lines, t)
   const b = state.brand
   const logoSrc = b.logoPath ? `/api/files/${b.logoPath}` : null
+  const ass = useMemo(() => (real ? assFor(state) : ''), [real, state])
   return (
     <div data-testid={testIds ? 'canvas-frame' : undefined} className={cn('relative overflow-hidden rounded-xl bg-black shadow-cf [container-type:inline-size]', className)}
       style={{ aspectRatio: ASPECT_RATIO[state.aspect] }}>
-      {layout.thumb.map((r, i) => <Region key={i} r={r} thumbnail={thumbnail} />)}
-      {state.subtitlesOn && chunk.words.length > 0 && (
+      {real ? (
+        <>
+          <ClipVideo src={real.src} track={real.track} aspect={state.aspect} layout={state.layoutId as RealLayout} trim={state.trim}
+            t={t} playing={real.playing} onTime={real.onTime} videoRef={real.videoRef} />
+          <AssOverlay ass={ass} videoRef={real.videoRef} offset={state.trim.start} />
+        </>
+      ) : layout.thumb.map((r, i) => <Region key={i} r={r} thumbnail={thumbnail} />)}
+      {!real && state.subtitlesOn && chunk.words.length > 0 && (
         <div className="absolute inset-x-0 flex justify-center" style={{ top: `${SUB_TOP[state.style.position] + state.style.offsetPct}%`, transform: 'translateY(-50%)' }}>
           <SubtitleLine testId={testIds ? 'canvas-subtitle' : undefined} style={state.style} words={chunk.words} active={chunk.active} />
         </div>
@@ -50,7 +77,7 @@ export function CanvasFrame({ state, t, thumbnail, className, testIds = true }: 
           {logoSrc ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img src={logoSrc} alt="" style={{ width: `${b.sizePct}cqw` }} />
-          ) : b.text?.value ? (
+          ) : real ? null : b.text?.value ? (
             <span style={{ color: b.text.color, opacity: b.text.opacity / 100, fontSize: `${Math.max(2.5, b.sizePct / 3)}cqw` }} className="font-semibold [text-shadow:0_1px_4px_rgb(0_0_0/0.6)]">{b.text.value}</span>
           ) : (
             <span style={{ width: `${b.sizePct}cqw`, fontSize: `${b.sizePct / 4}cqw` }} className="flex aspect-[2/1] items-center justify-center rounded-[1cqw] border border-white/60 font-bold tracking-wider text-white/90">LOGO</span>

@@ -32,9 +32,12 @@ export interface ProjectView {
 
 const mediaDir = (id: string) => join(/*turbopackIgnore: true*/ dataDir(), 'media', id)
 
+/** The project's own pipeline jobs. Exports (render jobs) run alongside and never drive the project's status, progress, cancel or retry. */
+const NOT_RENDER = { type: { not: 'render' } }
+
 type Row = Awaited<ReturnType<typeof loadRow>>
 async function loadRow(id: string) {
-  return getDb().project.findUnique({ where: { id }, include: { jobs: { orderBy: { createdAt: 'desc' }, take: 1 }, _count: { select: { clips: { where: { status: { not: 'deleted' } } } } } } })
+  return getDb().project.findUnique({ where: { id }, include: { jobs: { where: NOT_RENDER, orderBy: { createdAt: 'desc' }, take: 1 }, _count: { select: { clips: { where: { status: { not: 'deleted' } } } } } } })
 }
 
 function toView(p: NonNullable<Row>): ProjectView {
@@ -76,7 +79,7 @@ export async function createProject(input: CreateInput): Promise<ProjectView> {
 }
 
 export async function listProjects(): Promise<ProjectView[]> {
-  const rows = await getDb().project.findMany({ orderBy: { createdAt: 'desc' }, include: { jobs: { orderBy: { createdAt: 'desc' }, take: 1 }, _count: { select: { clips: { where: { status: { not: 'deleted' } } } } } } })
+  const rows = await getDb().project.findMany({ orderBy: { createdAt: 'desc' }, include: { jobs: { where: NOT_RENDER, orderBy: { createdAt: 'desc' }, take: 1 }, _count: { select: { clips: { where: { status: { not: 'deleted' } } } } } } })
   return rows.map(toView)
 }
 
@@ -126,7 +129,7 @@ export async function deleteProject(id: string): Promise<void> {
 async function startJob(id: string, type: 'analyze' | 'search', payload?: object): Promise<ProjectView> {
   const row = await mustLoad(id)
   const db = getDb()
-  const busy = await db.job.count({ where: { projectId: id, status: { in: ['queued', 'running', 'cancel_requested'] } } })
+  const busy = await db.job.count({ where: { projectId: id, ...NOT_RENDER, status: { in: ['queued', 'running', 'cancel_requested'] } } })
   if (busy) throw new ProjectError(409, 'This video is still processing — try again when it finishes')
   if (!existsSync(join(/*turbopackIgnore: true*/ mediaDir(id), 'transcript.json'))) throw new ProjectError(409, 'This video has no transcript yet')
   await db.job.create({ data: { id: randomUUID(), projectId: id, type, payload: payload ? JSON.stringify(payload) : null } })

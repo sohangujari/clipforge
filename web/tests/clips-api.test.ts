@@ -81,3 +81,127 @@ test('project view includes clipCount', async () => {
   const { getProject } = await import('@/lib/projects')
   expect((await getProject(p.id))!.clipCount).toBe(2)
 })
+
+const validEdit = async () => {
+  const { builtinPresets } = await import('@/lib/subtitle-presets')
+  return { aspect: '9:16', layoutId: 'single', style: builtinPresets[5], subtitlesOn: true, watermarkOn: false,
+    brand: { position: 'br', opacity: 80, sizePct: 12, marginPct: 4 }, trim: { start: 11, end: 39 }, resolution: '1080p' }
+}
+const patch = async (id: string, body: unknown) => {
+  const { PATCH } = await import('@/app/api/clips/[id]/route')
+  return PATCH(new Request('http://x', { method: 'PATCH', body: JSON.stringify(body) }), ctx({ id }))
+}
+
+test('a clip saves its own edit and returns it', async () => {
+  const { ids } = await projectWithClips()
+  const edit = await validEdit()
+  const res = await patch(ids[0], { edit })
+  expect(res.status).toBe(200)
+  expect((await res.json()).edit).toMatchObject({ layoutId: 'single', trim: { start: 11, end: 39 }, style: { id: 'boxed' } })
+  const { getClip } = await import('@/lib/clip-views')
+  expect((await getClip(ids[1]))!.edit).toBeUndefined() // per clip
+})
+
+test('invalid edits are rejected', async () => {
+  const { ids } = await projectWithClips()
+  const edit = await validEdit()
+  expect((await patch(ids[0], { edit: { ...edit, trim: { start: 20, end: 20 } } })).status).toBe(400)
+  expect((await patch(ids[0], { edit: { ...edit, layoutId: 'grid' } })).status).toBe(400) // needs speaker detection (Phase 6)
+  expect((await patch(ids[0], { status: 'nope' })).status).toBe(400)
+})
+
+const post = async (mod: string, id: string, body: unknown) => {
+  const { POST } = await import(mod)
+  return POST(new Request('http://x', { method: 'POST', body: JSON.stringify(body) }), ctx({ id }))
+}
+
+test('exporting a clip queues a render job with default editor settings, and leaves the project and clip alone', async () => {
+  const { p, ids } = await projectWithClips()
+  const d = await db()
+  await d.project.update({ where: { id: p.id }, data: { status: 'ready', warning: 'keep' } })
+  const res = await post('@/app/api/clips/[id]/export/route', ids[0], { resolution: '720p' })
+  expect(res.status).toBe(200)
+  const { jobId } = await res.json()
+  const job = await d.job.findUniqueOrThrow({ where: { id: jobId } })
+  expect(job.type).toBe('render')
+  const payload = JSON.parse(job.payload!)
+  expect(payload).toMatchObject({ clipIds: [ids[0]], resolution: '720p', zip: false })
+  // defaults travel with the job; the clip itself stays untouched, so later Settings changes still apply to it
+  expect(payload.edits[ids[0]]).toMatchObject({ aspect: '9:16', layoutId: 'single', trim: { start: 10, end: 40 }, style: { id: 'bold-pop' } })
+  expect((await d.clip.findUniqueOrThrow({ where: { id: ids[0] } })).edit).toBeNull()
+  expect(await d.project.findUniqueOrThrow({ where: { id: p.id } })).toMatchObject({ status: 'ready', warning: 'keep' })
+})
+
+test('export all zips every clip that is not deleted; deleted or unknown clips are 404', async () => {
+  const { p, ids } = await projectWithClips()
+  const { jobId } = await (await post('@/app/api/projects/[id]/export/route', p.id, { resolution: '1080p' })).json()
+  const job = await (await db()).job.findUniqueOrThrow({ where: { id: jobId } })
+  expect(JSON.parse(job.payload!)).toMatchObject({ clipIds: [ids[1], ids[0]], resolution: '1080p', zip: true })
+  expect((await post('@/app/api/clips/[id]/export/route', ids[2], { resolution: '1080p' })).status).toBe(404)
+  expect((await post('@/app/api/clips/[id]/export/route', randomUUID(), { resolution: '1080p' })).status).toBe(404)
+  expect((await post('@/app/api/clips/[id]/export/route', ids[0], { resolution: '4k' })).status).toBe(400)
+})
+
+test('job status lists download links once done', async () => {
+  const { p, ids } = await projectWithClips()
+  const { jobId } = await (await post('@/app/api/projects/[id]/export/route', p.id, { resolution: '1080p' })).json()
+  const { GET } = await import('@/app/api/jobs/[id]/route')
+  expect(await (await GET(new Request('http://x'), ctx({ id: jobId }))).json()).toMatchObject({ status: 'queued', files: [] })
+  await (await db()).job.update({ where: { id: jobId }, data: { status: 'done', progress: 1 } })
+  const done = await (await GET(new Request('http://x'), ctx({ id: jobId }))).json()
+  expect(done.files).toEqual([`/api/files/renders/${p.id}-clips.zip?name=${encodeURIComponent(p.title)}`])
+  expect((await GET(new Request('http://x'), ctx({ id: randomUUID() }))).status).toBe(404)
+  expect(ids).toHaveLength(3)
+})
+
+test('renders download as attachments with safe names; nothing else in renders/ is served', async () => {
+  const id = randomUUID()
+  mkdirSync(join(dir, 'renders'), { recursive: true })
+  writeFileSync(join(dir, 'renders', `${id}-1080p.mp4`), 'video')
+  const { GET } = await import('@/app/api/files/[...path]/route')
+  const get = (path: string[], q = '') => GET(new Request(`http://x/${q}`), ctx({ path }))
+  const r = await get(['renders', `${id}-1080p.mp4`], '?name=A%2FB%3A%20%22Hi%22%20%F0%9F%8E%89')
+  expect(r.status).toBe(200)
+  expect(await r.text()).toBe('video')
+  expect(r.headers.get('content-disposition')).toBe(`attachment; filename="A B Hi .mp4"; filename*=UTF-8''${encodeURIComponent('A B Hi 🎉.mp4')}`)
+  expect((await get(['renders', '..', 'clipforge.db'])).status).toBe(404)
+  expect((await get(['renders', '.fonts', 'inter-400.ttf'])).status).toBe(404)
+  const { safeFilename } = await import('@/lib/filenames')
+  expect(safeFilename('A/B: "Hi" 🎉', 'mp4')).toBe('A B Hi 🎉.mp4')
+  expect(safeFilename('', 'zip')).toBe('clip.zip')
+})
+
+test('long titles with emoji near the cut-off still make a valid download name', async () => {
+  const { safeFilename, attachment } = await import('@/lib/filenames')
+  const name = safeFilename('x'.repeat(79) + '🎉 and more', 'zip')
+  expect(name).toBe('x'.repeat(79) + '🎉.zip')
+  expect(() => attachment(name)).not.toThrow()
+})
+
+test('an export never hijacks the project view, cancel, or Find clips again', async () => {
+  const { p, ids } = await projectWithClips()
+  const d = await db()
+  const { writeFileSync: w } = await import('node:fs')
+  w(join(dir, 'media', p.id, 'transcript.json'), JSON.stringify({ language: 'en', words: [] }))
+  await d.job.updateMany({ where: { projectId: p.id }, data: { status: 'done' } })
+  const { analyzeProject, cancelProject, getProject } = await import('@/lib/projects')
+  await analyzeProject(p.id)
+  await post('@/app/api/clips/[id]/export/route', ids[0], { resolution: '1080p' }) // newest job is now the render
+  expect((await getProject(p.id))!.jobType).toBe('analyze')
+  await cancelProject(p.id)
+  const jobs = await d.job.findMany({ where: { projectId: p.id }, orderBy: { createdAt: 'desc' } })
+  expect(jobs.find((j) => j.type === 'render')!.status).toBe('queued')
+  expect(jobs.find((j) => j.type === 'analyze')!.status).toBe('cancelled')
+  // a queued export doesn't block Find clips again
+  await d.project.update({ where: { id: p.id }, data: { status: 'ready' } })
+  await expect(analyzeProject(p.id)).resolves.toBeTruthy()
+})
+
+test('an edit may leave out the brand kit (then the current Settings apply)', async () => {
+  const { ids } = await projectWithClips()
+  const edit: Record<string, unknown> = await validEdit()
+  delete edit.brand
+  const res = await patch(ids[0], { edit })
+  expect(res.status).toBe(200)
+  expect((await res.json()).edit.brand).toBeUndefined()
+})

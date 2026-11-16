@@ -1,0 +1,109 @@
+"""Where is the face? MediaPipe face detection on the 480p proxy at 2 fps → faces.json, smoothed once per video → track.json.
+Every clip, trim and aspect ratio reads track.json, so editing a trim never re-runs detection. ~150 MB, CPU only."""
+import json
+import logging
+import os
+import subprocess
+import urllib.request
+
+import numpy as np
+
+from ..clips.reframe import smooth_track
+from ..errors import Cancelled
+from ..media import probe
+
+log = logging.getLogger("clipforge.worker")
+FPS = 2
+WIDTH = 320  # detection size: plenty for faces in a podcast frame, cheap to decode
+MODEL_URL = "https://storage.googleapis.com/mediapipe-models/face_detector/blaze_face_short_range/float16/1/blaze_face_short_range.tflite"
+
+
+def _model(data_dir) -> str:
+    path = data_dir / "models" / "blaze_face_short_range.tflite"
+    if not path.exists():
+        path.parent.mkdir(parents=True, exist_ok=True)
+        tmp = path.with_suffix(".tmp")
+        urllib.request.urlretrieve(MODEL_URL, tmp)  # ~230 KB, once
+        os.replace(tmp, path)
+    return str(path)
+
+
+CUT_FPS, CUT_W, CUT_H = 25, 64, 36
+CUT_DIFF = 12      # mean |Δ| of tiny grey frames: ordinary frames < 4, camera cuts 15–30 (measured on a dark-studio podcast)
+CUT_GAP_S = 0.5    # flashes and fades produce runs of big diffs: keep the first
+
+
+def find_cuts(proxy) -> list[float]:
+    """Camera-cut times, frame-accurate at 25 fps (a cheap pass over 64×36 grey frames)."""
+    proc = subprocess.Popen(["ffmpeg", "-v", "error", "-i", str(proxy), "-vf", f"fps={CUT_FPS},scale={CUT_W}:{CUT_H},format=gray",
+                             "-f", "rawvideo", "pipe:1"], stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+    cuts, prev, n, size = [], None, 0, CUT_W * CUT_H
+    try:
+        while (buf := proc.stdout.read(size)) and len(buf) == size:
+            f = np.frombuffer(buf, np.uint8).astype(np.int16)
+            if prev is not None and np.abs(f - prev).mean() > CUT_DIFF:
+                t = n / CUT_FPS
+                if not cuts or t - cuts[-1] >= CUT_GAP_S:
+                    cuts.append(round(t, 3))
+            prev, n = f, n + 1
+    finally:
+        proc.stdout.close()
+        proc.wait()
+    return cuts
+
+
+def _write(path, data) -> None:
+    tmp = path.with_suffix(".tmp")
+    tmp.write_text(json.dumps(data))
+    os.replace(tmp, path)
+
+
+def run(ctx) -> None:
+    """Never fails the job: without a track the crop stays centred, and the next Find clips/export tries again."""
+    if (ctx.media_dir / "track.json").exists():
+        ctx.report(1.0)
+        return
+    try:
+        _detect(ctx)
+    except Cancelled:
+        raise
+    except Exception as e:  # offline on first use (model download), missing proxy, MediaPipe error…
+        log.warning("face tracking skipped: %s", e)
+        ctx.report(1.0)
+
+
+def _detect(ctx) -> None:
+    md = ctx.media_dir
+    import mediapipe as mp  # imported here: only this stage pays for it
+    from mediapipe.tasks.python import BaseOptions, vision
+
+    proxy = md / "proxy.mp4"
+    v = probe(proxy)
+    w, h = WIDTH, max(2, round(WIDTH * v["height"] / v["width"] / 2) * 2)
+    total = max(1, int(float(ctx.project.get("durationSec") or 0) * FPS))
+    detector = vision.FaceDetector.create_from_options(vision.FaceDetectorOptions(
+        base_options=BaseOptions(model_asset_path=_model(ctx.data_dir)), min_detection_confidence=0.65))  # test patterns gave false faces at 0.50–0.56
+    proc = subprocess.Popen(["ffmpeg", "-v", "error", "-i", str(proxy), "-vf", f"fps={FPS},scale={w}:{h}", "-f", "rawvideo", "-pix_fmt", "rgb24", "pipe:1"],
+                            stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+    frames, size = [], w * h * 3
+    try:
+        while (buf := proc.stdout.read(size)) and len(buf) == size:
+            img = mp.Image(image_format=mp.ImageFormat.SRGB, data=np.frombuffer(buf, np.uint8).reshape(h, w, 3))
+            dets = detector.detect(img).detections
+            if dets:
+                b = max(dets, key=lambda d: d.bounding_box.width * d.bounding_box.height).bounding_box
+                frames.append([round((b.origin_x + b.width / 2) / w, 4), round((b.origin_y + b.height / 2) / h, 4),
+                               round(b.width / w, 4), round(b.height / h, 4), round(dets[0].categories[0].score, 3)])
+            else:
+                frames.append(None)
+            if len(frames) % 20 == 0:
+                ctx.report(min(0.99, len(frames) / total), "Finding faces")
+    finally:
+        proc.stdout.close()
+        proc.wait()
+        detector.close()
+    ctx.report(0.99, "Finding camera cuts")
+    cuts = find_cuts(proxy)
+    _write(md / "faces.json", {"fps": FPS, "w": v["width"], "h": v["height"], "frames": frames, "cuts": cuts})
+    _write(md / "track.json", {"keyframes": smooth_track(frames, FPS, cuts)})
+    ctx.report(1.0)

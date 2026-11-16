@@ -4,12 +4,13 @@ import { existsSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { getDb } from './db'
 import { dataDir } from './paths'
+import type { ClipEdit } from './clip-edit'
 import type { MockClip, Word } from './mock'
 
 /** A real clip in the same shape as the Phase 1 MockClip, so ClipCard/ClipDetails/editor accept both. */
 export interface ClipView extends MockClip {
   status: 'new' | 'kept' | 'deleted'; source: 'auto' | 'search'; query?: string; thumbnailUrl?: string
-  signals: Record<string, number>; signalsUsed: string[]; reasons: Record<string, string>
+  signals: Record<string, number>; signalsUsed: string[]; reasons: Record<string, string>; edit?: ClipEdit
 }
 
 type Row = Awaited<ReturnType<ReturnType<typeof getDb>['clip']['findFirstOrThrow']>>
@@ -32,6 +33,7 @@ export function toClipView(r: Row, words: Word[]): ClipView {
     transcript: words.filter((w) => w.s >= r.startSec - 0.05 && w.e <= r.endSec + 0.05),
     status: r.status as ClipView['status'], source: r.source as ClipView['source'], query: r.query ?? undefined,
     thumbnailUrl: existsSync(thumb) ? `/api/files/media/${r.projectId}/clips/${r.id}.jpg` : undefined,
+    edit: r.edit ? JSON.parse(r.edit) : undefined,
   }
 }
 
@@ -44,6 +46,11 @@ export async function listClips(projectId: string): Promise<ClipView[]> {
 export async function getClip(id: string): Promise<ClipView | null> {
   const r = await getDb().clip.findUnique({ where: { id } })
   return r ? toClipView(r, readWords(r.projectId)) : null
+}
+
+export async function setClipEdit(id: string, edit: ClipEdit): Promise<ClipView | null> {
+  const r = await getDb().clip.updateMany({ where: { id }, data: { edit: JSON.stringify(edit) } })
+  return r.count ? getClip(id) : null
 }
 
 export const tasteCount = () => getDb().clipFeedback.count()

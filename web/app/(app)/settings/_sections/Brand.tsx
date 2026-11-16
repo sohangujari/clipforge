@@ -17,10 +17,15 @@ export function BrandSection() {
   const upload = async (file?: File) => {
     if (!file) return
     const fd = new FormData(); fd.append('file', file)
+    if (file.type === 'image/svg+xml' || file.name.toLowerCase().endsWith('.svg')) {
+      const png = await svgToPng(file).catch(() => null) // the export needs a PNG: FFmpeg can't read SVG
+      if (!png) return toast.error("Couldn't read that SVG — try a PNG")
+      fd.append('png', png, 'logo.png')
+    }
     const res = await fetch('/api/uploads/logo', { method: 'POST', body: fd })
     const j = await res.json().catch(() => ({}))
     if (!res.ok) return toast.error(j.error ?? 'Upload failed')
-    setValue({ ...b, logoPath: j.path })
+    setValue({ ...b, logoPath: j.path, logoPngPath: j.pngPath })
   }
 
   return (
@@ -53,4 +58,19 @@ export function BrandSection() {
       <SaveBar saving={saving} onSave={() => save()} />
     </div>
   )
+}
+
+/** Renders an SVG to a 1024-px-wide PNG (transparent background) in the browser. */
+async function svgToPng(file: File): Promise<Blob> {
+  const url = URL.createObjectURL(file)
+  try {
+    const img = new Image()
+    img.src = url
+    await img.decode()
+    const w = 1024, h = Math.max(1, Math.round((w * (img.naturalHeight || 512)) / (img.naturalWidth || 1024)))
+    const c = document.createElement('canvas')
+    c.width = w; c.height = h
+    c.getContext('2d')!.drawImage(img, 0, 0, w, h)
+    return await new Promise<Blob>((ok, fail) => c.toBlob((b) => (b ? ok(b) : fail(new Error('toBlob'))), 'image/png'))
+  } finally { URL.revokeObjectURL(url) }
 }

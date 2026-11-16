@@ -10,7 +10,10 @@
     "test": "vitest run",
     "db:push": "prisma db push && prisma generate",
     "postinstall": "prisma generate",
-    "e2e": "playwright test"
+    "e2e": "playwright test",
+    "ass:fixtures": "ASS_FIXTURES=write vitest run tests/ass-fixtures.test.ts",
+    "predev": "node scripts/bundle-jassub.mjs",
+    "prebuild": "node scripts/bundle-jassub.mjs"
   },
   "dependencies": {
     "@ai-sdk/anthropic": "^4.0.105",
@@ -24,6 +27,7 @@
     "class-variance-authority": "^0.7.1",
     "cmdk": "^1.1.1",
     "cn": "^0.5.2",
+    "jassub": "2.5.23",
     "lucide-react": "^1.73.0",
     "motion": "^14.14.0",
     "next": "16.4.6",
@@ -47,6 +51,7 @@
     "eslint": "^9",
     "eslint-config-next": "16.4.6",
     "prisma": "^7.10.1",
+    "rolldown": "1.2.16",
     "tailwindcss": "4.3.3",
     "typescript": "^5",
     "vitest": "^5.1.0"

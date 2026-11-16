@@ -16,18 +16,20 @@ from . import db  # noqa: E402
 from .paths import data_dir  # noqa: E402
 from .runner import run_job  # noqa: E402
 from . import signals  # noqa: E402
-from .stages import analyze, importer, prepare, romanize, search, transcribe  # noqa: E402
+from .stages import analyze, faces, importer, prepare, render, romanize, search, transcribe  # noqa: E402
 
 STAGES = {"importing": importer.run, "preparing": prepare.run, "transcribing": transcribe.run, "romanizing": romanize.run,
-          "signals": signals.run, "analyzing": analyze.run}
+          "signals": signals.run, "faces": faces.run, "analyzing": analyze.run}
 
 
 def stages_for(job) -> dict:
     """ingest = the full pipeline; analyze = Find clips again on an existing transcript; search = one plain-language query."""
     if job.type == "analyze":
-        return {k: STAGES[k] for k in ("signals", "analyzing")}
+        return {k: STAGES[k] for k in ("signals", "faces", "analyzing")}
     if job.type == "search":
         return {"searching": search.run}
+    if job.type == "render":
+        return {"rendering": render.run}
     return STAGES
 IDLE_POLL_S = 1.0
 ALIVE_EVERY_S = 5.0

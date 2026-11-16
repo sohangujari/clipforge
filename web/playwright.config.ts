@@ -15,7 +15,7 @@ export default defineConfig({
   use: { baseURL: 'http://127.0.0.1:3100', ...devices['Desktop Chrome'] },
   webServer: [
     {
-      command: 'npx prisma db push && npx next dev -H 127.0.0.1 -p 3100',
+      command: 'npx prisma db push && node scripts/bundle-jassub.mjs && npx next dev -H 127.0.0.1 -p 3100',
       url: 'http://127.0.0.1:3100',
       timeout: 120_000,
       reuseExistingServer: false,

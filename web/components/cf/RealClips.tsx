@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { Film, Loader2, RefreshCw, Search, Settings, TriangleAlert } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
+import { ExportButton } from './ExportButton'
 import { Input } from '@/components/ui/input'
 import type { ClipView } from '@/lib/clip-views'
 import type { ProjectView } from '@/lib/projects'
@@ -76,6 +77,7 @@ export function RealClips({ initial }: { initial: ProjectView }) {
           <Button type="submit" disabled={running || query.trim().length < 3}>Search</Button>
         </form>
         <Button variant="secondary" disabled={running} onClick={() => start('analyze')}><RefreshCw /> Find clips again</Button>
+        {!!clips?.length && <ExportButton projectId={p.id} resolution="1080p" zip variant="secondary" />}
       </div>
 
       {running && (

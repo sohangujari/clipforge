@@ -1,0 +1,89 @@
+import { expect, test, type Page } from '@playwright/test'
+import { makeSpeechVideo } from './fixtures'
+
+test.describe.configure({ mode: 'serial' })
+test.setTimeout(240_000)
+
+const SPEECH = 'Today I want to tell you a story about the time we set up our students on blind dates for science. ' +
+  'It sounds crazy, right? But the class was a research study about loneliness, and the results surprised everyone. ' +
+  'People who made one new friend felt dramatically better. So put your phone down tonight and call someone you miss.'
+
+let editorUrl = ''
+
+test.beforeAll(async ({ request }) => {
+  await request.put('/api/providers/custom', { data: { baseUrl: 'http://127.0.0.1:3199/v1', enabled: true } })
+  const m = { provider: 'custom', model: 'fake' }
+  await request.put('/api/settings/aiTasks', { data: { highlight: m, scoring: m, titles: m, vision: null } })
+  const d = await (await request.get('/api/settings/defaults')).json()
+  await request.put('/api/settings/defaults', { data: { ...d, lengthRange: [15, 60] } })
+})
+
+const frame = (page: Page) => page.getByTestId('canvas-frame')
+
+test('a real clip opens in the editor with its video and the face track', async ({ page }) => {
+  await page.goto('/new')
+  await page.locator('input[type=file]').setInputFiles(makeSpeechVideo(SPEECH))
+  await page.getByRole('button', { name: 'Create clips' }).click()
+  await expect(page).toHaveURL(/\/clips$/, { timeout: 200_000 })
+  const pid = /projects\/([0-9a-f-]{36})\//.exec(page.url())![1]
+  const clipId = await page.getByTestId('clip-card').first().getAttribute('data-clip-id')
+  editorUrl = `/editor/${pid}/${clipId}`
+  expect((await page.request.get(`/api/files/media/${pid}/track.json`)).ok()).toBe(true)
+
+  await page.goto(editorUrl)
+  const video = frame(page).getByTestId('clip-video')
+  await expect.poll(() => video.evaluate((v: HTMLVideoElement) => v.readyState), { timeout: 20_000 }).toBeGreaterThanOrEqual(2)
+  const clip = await (await page.request.get(`/api/clips/${clipId}`)).json()
+  const t = await video.evaluate((v: HTMLVideoElement) => v.currentTime)
+  expect(t).toBeGreaterThanOrEqual(clip.startSec - 0.1)
+  expect(t).toBeLessThanOrEqual(clip.endSec)
+})
+
+test('subtitles are drawn by libass on a canvas over the video, with the bundled fonts', async ({ page }) => {
+  const misses: string[] = []
+  page.on('console', (m) => { if (/fontselect: failed/.test(m.text())) misses.push(m.text()) })
+  await page.goto(editorUrl)
+  const overlay = frame(page).getByTestId('ass-overlay')
+  await expect(overlay).toHaveAttribute('data-ready', '1', { timeout: 20_000 })
+  const clip = await (await page.request.get(`/api/clips/${editorUrl.split('/').pop()}`)).json()
+  const word = clip.transcript[2] // mid-word, so a subtitle must be on screen
+  await frame(page).getByTestId('clip-video').evaluate((v: HTMLVideoElement, t: number) => { v.currentTime = t }, (word.s + word.e) / 2)
+  await page.waitForTimeout(800)
+  const on = await frame(page).screenshot()
+  await page.getByRole('switch', { name: /subtitles/i }).first().click()
+  await page.waitForTimeout(500)
+  const off = await frame(page).screenshot()
+  expect(on.equals(off)).toBe(false)
+  expect(misses).toEqual([]) // a font libass can't find renders as empty boxes
+})
+
+test('choosing a preset is saved with the clip', async ({ page }) => {
+  await page.goto(editorUrl)
+  await page.getByRole('button', { name: 'Subtitles', exact: true }).click()
+  await page.getByRole('button', { name: /Boxed/ }).first().click()
+  await page.waitForTimeout(1500) // autosave debounce
+  await page.reload()
+  await page.getByRole('button', { name: 'Subtitles', exact: true }).click()
+  await expect(page.getByRole('button', { name: /Boxed/ }).first()).toHaveAttribute('aria-pressed', 'true')
+})
+
+test('only layouts that work today can be picked', async ({ page }) => {
+  await page.goto(editorUrl)
+  await page.getByRole('button', { name: 'Layout', exact: true }).click()
+  await expect(page.locator('[data-layout=single]')).toBeEnabled()
+  await expect(page.locator('[data-layout=wide-blur]')).toBeEnabled()
+  await expect(page.locator('[data-layout=split]')).toBeDisabled()
+  await expect(page.locator('[data-layout=split]')).toContainText('Coming in Phase 6')
+  await page.locator('[data-layout=wide-blur]').click()
+  await expect(frame(page).getByTestId('clip-video-blur')).toBeVisible()
+})
+
+test('a change made right before leaving the editor is still saved', async ({ page }) => {
+  await page.goto(editorUrl)
+  await page.getByRole('button', { name: 'Subtitles', exact: true }).click()
+  await page.getByRole('button', { name: /Neon/ }).first().click()
+  await page.goto('/') // immediately: before the autosave delay
+  await page.goto(editorUrl)
+  await page.getByRole('button', { name: 'Subtitles', exact: true }).click()
+  await expect(page.getByRole('button', { name: /Neon/ }).first()).toHaveAttribute('aria-pressed', 'true')
+})

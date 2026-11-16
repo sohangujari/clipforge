@@ -59,3 +59,17 @@ test('logo upload rejects non-image, accepts png', async () => {
   expect(res.status).toBe(200)
   expect((await res.json()).path).toMatch(/^logos\/[0-9a-f-]+\.png$/)
 })
+
+test('an SVG logo is stored with the PNG the browser rendered from it (FFmpeg cannot read SVG)', async () => {
+  const { existsSync } = await import('node:fs')
+  const { POST } = await import('@/app/api/uploads/logo/route')
+  const svg = new File(['<svg xmlns="http://www.w3.org/2000/svg"/>'], 'l.svg', { type: 'image/svg+xml' })
+  const png = new File([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1, 2])], 'l.png', { type: 'image/png' })
+  const up = (files: Record<string, File>) => { const fd = new FormData(); for (const [k, f] of Object.entries(files)) fd.append(k, f); return POST(new Request('http://x', { method: 'POST', body: fd })) }
+  const j = await (await up({ file: svg, png })).json()
+  expect(j.path).toMatch(/^logos\/[0-9a-f-]{36}\.svg$/)
+  expect(j.pngPath).toBe(j.path.replace(/\.svg$/, '.png'))
+  expect(existsSync(join(dir, j.pngPath))).toBe(true)
+  expect((await up({ file: svg, png: new File(['not a png'], 'x.png') })).status).toBe(400)
+  expect((await (await up({ file: svg })).json()).pngPath).toBeUndefined()
+})

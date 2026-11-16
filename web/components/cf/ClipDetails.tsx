@@ -2,6 +2,7 @@
 import { useState } from 'react'
 import { Copy, Loader2, RefreshCw, Sparkles } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { ExportButton } from './ExportButton'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { copyText } from '@/lib/copy'
 import type { MockClip } from '@/lib/mock'
@@ -43,6 +44,7 @@ export function ClipDetails({ clip, onRegenerate, tasteCount }: { clip: DetailCl
   return (
     <div className="flex flex-col gap-5">
       <div className="flex items-center gap-3"><ScoreBadge score={clip.score} className="h-9 min-w-12 text-base" /><p className="text-sm text-muted-foreground">{clip.reason}</p></div>
+      {'status' in clip && <ExportButton clipId={clip.id} projectId={clip.projectId} resolution="1080p" />}
       {!!tasteCount && <p className="flex items-center gap-1.5 text-xs text-muted-foreground"><Sparkles className="size-3.5 text-cf-accent" />Learned from {tasteCount} of your keep/delete choices</p>}
       <div className="flex flex-col gap-2.5">
         {[...DIMS, ...extras.map(([k]) => [k, k[0].toUpperCase() + k.slice(1)] as [string, string])].map(([k, label]) => (

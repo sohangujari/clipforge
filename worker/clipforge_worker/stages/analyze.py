@@ -171,7 +171,7 @@ def run(ctx) -> None:
     if skipped:
         warnings.append(f"{skipped} of {len(wins)} parts couldn't be analysed")
     cands = dedupe(cands)
-    reviewed = ctx.conn.execute("SELECT startSec, endSec FROM Clip WHERE projectId=? AND status!='new'", (ctx.job.project_id,)).fetchall()
+    reviewed = ctx.conn.execute("SELECT startSec, endSec FROM Clip WHERE projectId=? AND (status!='new' OR edit IS NOT NULL)", (ctx.job.project_id,)).fetchall()
     cands = [c for c in cands if all(overlap(c, {"startSec": a, "endSec": b}) < 0.5 for a, b in reviewed)]  # kept stays once, deleted stays gone
 
     if local:
@@ -196,7 +196,7 @@ def run(ctx) -> None:
     if not chosen and (skipped or llm.quota_msg):  # an error, not an empty video: don't throw away the last good run
         warnings.append("nothing new was found, so ClipForge kept your previous clips — try Find clips again")
     else:
-        ctx.conn.execute("DELETE FROM Clip WHERE projectId=? AND source='auto' AND status='new'", (ctx.job.project_id,))
+        ctx.conn.execute("DELETE FROM Clip WHERE projectId=? AND source='auto' AND status='new' AND edit IS NULL", (ctx.job.project_id,))
         insert_clips(ctx, chosen, "auto")
     try:
         call_llm_ex("unload", {})  # give the local model's memory back

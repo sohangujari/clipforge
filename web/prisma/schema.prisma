@@ -80,6 +80,7 @@ model Clip {
   source       String   @default("auto") // auto | search
   query        String?
   status       String   @default("new") // new | kept | deleted
+  edit         String? // ClipEdit JSON (lib/clip-edit.ts): the editor's choices, used by export
   createdAt    DateTime @default(now())
 
   @@index([projectId, score])
