@@ -9,7 +9,7 @@ beforeEach(() => { dir = freshDb(); vi.resetModules() })
 test('defaults when unset', async () => {
   const { getSetting } = await import('@/lib/settings')
   expect(await getSetting('defaults')).toEqual({
-    clipCount: 'auto', lengthRange: [30, 90], language: 'auto', tone: 'neutral', contentType: 'auto', whisperModel: 'large-v3-turbo',
+    clipCount: 'auto', lengthRange: [30, 90], language: 'auto', tone: 'neutral', contentType: 'auto', whisperModel: 'large-v3-turbo', vocabulary: [], captionScript: 'native',
   })
   expect((await getSetting('brandKit')).position).toBe('br')
   expect(await getSetting('aiTasks')).toEqual({ highlight: null, scoring: null, titles: null, vision: null })

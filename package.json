@@ -2,8 +2,13 @@
   "name": "clipforge",
   "private": true,
   "scripts": {
-    "setup": "npm --prefix web ci && npm --prefix web run db:push",
-    "dev": "npm --prefix web run dev",
-    "test": "npm --prefix web test"
+    "setup": "npm install && npm --prefix web ci && npm --prefix web run db:push && uv sync --project worker",
+    "setup:models": "uv run --directory worker python -m clipforge_worker.download_model",
+    "start": "npm --prefix web run build && concurrently -n web,worker -c blue,magenta --kill-others-on-fail \"npm --prefix web run start\" \"uv run --directory worker python -m clipforge_worker\"",
+    "dev": "concurrently -n web,worker -c blue,magenta --kill-others-on-fail \"npm --prefix web run dev\" \"uv run --directory worker python -m clipforge_worker\"",
+    "test": "npm --prefix web test && uv run --directory worker pytest -q"
+  },
+  "devDependencies": {
+    "concurrently": "^10.0.7"
   }
 }

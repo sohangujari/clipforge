@@ -14,7 +14,7 @@ import type { ProviderView } from '@/lib/providers-store'
 import type { SettingValue } from '@/lib/settings'
 import { useSetting } from '@/lib/use-setting'
 
-const KEY_PLACEHOLDER: Record<ProviderKind, string> = { anthropic: 'sk-ant-…', openai: 'sk-…', google: 'AIza…', ollama: '', custom: 'Optional' }
+const KEY_PLACEHOLDER: Record<ProviderKind, string> = { anthropic: 'sk-ant-…', openai: 'sk-…', google: 'AIza…', cloudflare: 'API token (Workers AI: Read)', ollama: '', custom: 'Optional' }
 const TASKS = [['highlight', 'Highlight detection'], ['scoring', 'Scoring'], ['titles', 'Titles & descriptions'], ['vision', 'Vision (gaming events)']] as const
 
 function ProviderCard({ view, onSaved }: { view: ProviderView; onSaved: (v: ProviderView) => void }) {
@@ -25,7 +25,8 @@ function ProviderCard({ view, onSaved }: { view: ProviderView; onSaved: (v: Prov
   const [testing, setTesting] = useState(false)
   const [result, setResult] = useState<TestResult | null>(null)
   const hasKey = view.kind !== 'ollama'
-  const hasUrl = view.kind === 'ollama' || view.kind === 'custom' || view.kind === 'openai'
+  const hasUrl = view.kind === 'ollama' || view.kind === 'custom' || view.kind === 'openai' || view.kind === 'cloudflare'
+  const cf = view.kind === 'cloudflare' // its "base URL" is the account ID
   const dirty = key.trim() !== '' || (hasUrl && baseUrl !== (view.baseUrl ?? '')) // Test uses saved values
 
   const save = async (patch: { apiKey?: string; baseUrl?: string; enabled?: boolean }) => {
@@ -56,8 +57,9 @@ function ProviderCard({ view, onSaved }: { view: ProviderView; onSaved: (v: Prov
           </Field>
         )}
         {hasUrl && (
-          <Field label="Base URL">
-            <Input aria-label="Base URL" value={baseUrl} onChange={(e) => setBaseUrl(e.target.value)} placeholder="https://…/v1" />
+          <Field label={cf ? 'Account ID' : 'Base URL'}>
+            <Input aria-label={cf ? 'Account ID' : 'Base URL'} value={baseUrl} onChange={(e) => setBaseUrl(e.target.value)}
+              placeholder={cf ? 'From the Cloudflare dashboard → Workers AI' : 'https://…/v1'} />
           </Field>
         )}
       </div>
@@ -73,6 +75,18 @@ function ProviderCard({ view, onSaved }: { view: ProviderView; onSaved: (v: Prov
           : <span className="flex items-center gap-1.5 text-sm text-cf-accent"><XCircle className="size-4 shrink-0" />{result.error.message}</span>)}
       </div>
     </section>
+  )
+}
+
+function UsageToday() {
+  const [u, setU] = useState<{ date: string; counts: Record<string, number> } | null>(null)
+  useEffect(() => { fetch('/api/settings/llmUsage').then((r) => r.json()).then(setU).catch(() => {}) }, [])
+  const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Los_Angeles' }).format(new Date())
+  const counts = u && u.date === today ? Object.entries(u.counts) : []
+  return (
+    <p data-testid="usage-today" className="text-xs text-muted-foreground">
+      Requests today (resets at midnight Pacific, like free tiers): {counts.length ? counts.map(([k, n]) => `${k.split(':').slice(1).join(':')} ${n}`).join(' · ') : 'none yet'}
+    </p>
   )
 }
 
@@ -97,6 +111,7 @@ function TaskModels({ providers }: { providers: ProviderView[] }) {
           </div>
         )
       })}
+      <UsageToday />
       <Button className="self-start" size="sm" disabled={saving} onClick={() => save({ ...value, ...Object.fromEntries(TASKS.map(([t]) => [t, value[t]?.model ? value[t] : null])) })}>Save changes</Button>
     </section>
   )
@@ -115,7 +130,7 @@ export function AiSection() {
       {mem !== null && mem <= 8 * 2 ** 30 && (
         <div className="flex gap-3 rounded-xl border border-amber-500/30 bg-amber-500/10 p-4 text-sm">
           <Cpu className="size-5 shrink-0 text-amber-600" />
-          <p>This Mac has {Math.round(mem / 2 ** 30)} GB of memory. For local AI, pick a 2–4B Ollama model (e.g. <code>qwen3:4b</code>). Bigger models will swap and slow everything down. Cloud providers use no local memory.</p>
+          <p>This Mac has {Math.round(mem / 2 ** 30)} GB of memory. <strong>For a smooth Mac, use a cloud model</strong> — Gemini’s free tier works well (Flash for highlights, Flash-Lite for scoring and titles) and uses no memory here. Local models of 4B or larger fill most of the memory and the GPU, so the whole Mac lags while clips are found; a 2B model (e.g. <code>qwen3.5:2b</code>) is lighter but picks weaker clips.</p>
         </div>
       )}
       {providers.map((v) => <ProviderCard key={v.kind} view={v} onSaved={(nv) => setProviders(providers.map((p) => (p.kind === nv.kind ? nv : p)))} />)}

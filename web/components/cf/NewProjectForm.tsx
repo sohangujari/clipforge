@@ -2,15 +2,17 @@
 import { useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
-import { FileVideo, Link2, Upload, X } from 'lucide-react'
+import { FileVideo, Link2, Loader2, Upload, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { CONTENT_TYPE_INFO } from '@/lib/content-types'
+import { uploadFile } from '@/lib/upload-client'
 import type { SettingValue } from '@/lib/settings'
 import { cn } from '@/lib/utils'
 import { CfSlider } from './CfSlider'
 import { Segmented } from './Segmented'
+import { VocabularyInput } from './VocabularyInput'
 
 type Defaults = SettingValue<'defaults'>
 const ACCEPT = '.mp4,.mov,.mkv,.webm'
@@ -26,6 +28,7 @@ export function NewProjectForm() {
   const [url, setUrl] = useState('')
   const [drag, setDrag] = useState(false)
   const [d, setD] = useState<Defaults | null>(null)
+  const [busy, setBusy] = useState<null | { progress: number; abort: AbortController }>(null)
 
   useEffect(() => {
     fetch('/api/settings/defaults').then((r) => r.json()).then(setD).catch(() => toast.error("Couldn't load defaults"))
@@ -37,12 +40,30 @@ export function NewProjectForm() {
     setFile(f); setUrl('')
   }
 
-  const submit = (e: React.FormEvent) => {
+  const fail = async (res: Response) => toast.error((await res.json().catch(() => ({}))).error ?? 'Something went wrong')
+
+  const submit = async (e: React.FormEvent) => {
     e.preventDefault()
+    if (busy || !d) return
     if (!file && !url.trim()) return toast.error('Add a video file or paste a link')
-    if (url && !/^https?:\/\/\S+$/i.test(url.trim())) return toast.error('That link doesn’t look like a URL')
-    toast('Processing arrives in Phase 2 — showing a demo')
-    router.push('/projects/p-processing/processing')
+    if (!file && !/^https?:\/\/\S+$/i.test(url.trim())) return toast.error('Paste a full link starting with https://')
+    const { contentType, ...settings } = d
+    if (!file) {
+      const res = await fetch('/api/projects', { method: 'POST', body: JSON.stringify({ url: url.trim(), settings, contentType }) })
+      if (!res.ok) return fail(res)
+      return router.push(`/projects/${(await res.json()).id}/processing`)
+    }
+    const abort = new AbortController()
+    setBusy({ progress: 0, abort })
+    try {
+      const uploadId = await uploadFile(file, { signal: abort.signal, onProgress: (progress) => setBusy({ progress, abort }) })
+      const res = await fetch(`/api/uploads/${uploadId}/complete`, { method: 'POST', body: JSON.stringify({ settings, contentType }) })
+      if (!res.ok) { setBusy(null); return fail(res) }
+      router.push(`/projects/${(await res.json()).id}/processing`)
+    } catch (err) {
+      setBusy(null)
+      if (!abort.signal.aborted) toast.error((err as Error).message)
+    }
   }
 
   return (
@@ -50,7 +71,17 @@ export function NewProjectForm() {
       <div className="flex flex-col gap-6">
         <section className="rounded-xl bg-card p-5 shadow-cf">
           <h2 className="mb-3 font-semibold">Video</h2>
-          {file ? (
+          {file && busy ? (
+            <div className="flex flex-col gap-2 rounded-lg bg-muted p-3">
+              <div className="flex items-center gap-3 text-sm">
+                <Loader2 className="size-4 animate-spin text-cf-accent" />
+                <span className="min-w-0 flex-1 truncate font-medium">Uploading {file.name}</span>
+                <span className="tabular-nums text-muted-foreground">{Math.round(busy.progress * 100)}% · {fmtSize(file.size * busy.progress)} of {fmtSize(file.size)}</span>
+                <Button type="button" variant="ghost" size="sm" onClick={() => { busy.abort.abort(); setBusy(null) }}>Cancel</Button>
+              </div>
+              <div className="h-1.5 overflow-hidden rounded-full bg-background"><div className="h-full rounded-full bg-cf-accent transition-[width] duration-200" style={{ width: `${busy.progress * 100}%` }} /></div>
+            </div>
+          ) : file ? (
             <div className="flex items-center gap-3 rounded-lg bg-muted p-3">
               <FileVideo className="size-5 text-muted-foreground" />
               <div className="min-w-0 flex-1"><p className="truncate text-sm font-medium">{file.name}</p><p className="text-xs text-muted-foreground">{fmtSize(file.size)}</p></div>
@@ -126,9 +157,21 @@ export function NewProjectForm() {
                 </Select>
               </label>
             </div>
+            <div className="flex flex-col gap-2">
+              <span className="text-xs font-medium text-muted-foreground">Custom words <span className="font-normal">— spelled exactly in captions</span></span>
+              <VocabularyInput value={d.vocabulary} onChange={(vocabulary) => setD({ ...d, vocabulary })} />
+            </div>
+            {(d.language === 'auto' || d.language === 'hi') && (
+              <div className="flex flex-col gap-2">
+                <span className="text-xs font-medium text-muted-foreground">Captions script</span>
+                <Segmented aria-label="Captions script" value={d.captionScript} onChange={(captionScript) => setD({ ...d, captionScript })}
+                  options={[{ value: 'native', label: 'Native' }, { value: 'hinglish', label: 'Hinglish' }]} />
+                {d.captionScript === 'hinglish' && <span className="text-xs text-muted-foreground">Hindi is romanised with your AI model (Settings → AI).</span>}
+              </div>
+            )}
           </>
         )}
-        <Button type="submit" size="lg" className="mt-1">Create clips</Button>
+        <Button type="submit" size="lg" className="mt-1" disabled={!!busy || !d}>{busy ? 'Uploading…' : 'Create clips'}</Button>
       </aside>
     </form>
   )

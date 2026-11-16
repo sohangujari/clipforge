@@ -4,6 +4,7 @@ import { CfSlider } from '@/components/cf/CfSlider'
 import { Field } from '@/components/cf/Field'
 import { LANGUAGES, TONE_LABELS } from '@/components/cf/NewProjectForm'
 import { Segmented } from '@/components/cf/Segmented'
+import { VocabularyInput } from '@/components/cf/VocabularyInput'
 import { CONTENT_TYPE_INFO } from '@/lib/content-types'
 import type { SettingValue } from '@/lib/settings'
 import { useSetting } from '@/lib/use-setting'
@@ -42,6 +43,13 @@ export function DefaultsSection() {
         <Pick label="Language" value={d.language} options={LANGUAGES} onChange={(language) => setValue({ ...d, language })} />
         <Pick label="Tone" value={d.tone} options={Object.entries(TONE_LABELS) as [D['tone'], string][]} onChange={(tone) => setValue({ ...d, tone })} />
         <Pick label="Transcription model" value={d.whisperModel} options={WHISPER} onChange={(whisperModel) => setValue({ ...d, whisperModel })} />
+        <Field label="Captions script (Hindi)">
+          <Segmented aria-label="Captions script" value={d.captionScript} onChange={(captionScript) => setValue({ ...d, captionScript })}
+            options={[{ value: 'native', label: 'Native' }, { value: 'hinglish', label: 'Hinglish' }]} />
+        </Field>
+        <Field label="Custom words (names, brands — spelled exactly in captions)" className="sm:col-span-2">
+          <VocabularyInput value={d.vocabulary} onChange={(vocabulary) => setValue({ ...d, vocabulary })} />
+        </Field>
       </section>
       <SaveBar saving={saving} onSave={() => save()} />
     </div>

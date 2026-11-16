@@ -1,0 +1,23 @@
+[project]
+name = "clipforge-worker"
+version = "0.1.0"
+description = "ClipForge media worker: import, prepare, transcribe"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+  "yt-dlp>=2026.10.26",
+  "onnxruntime>=1.20",
+  "numpy>=2",
+  "mlx-whisper>=0.4.3; sys_platform == 'darwin' and platform_machine == 'arm64'",
+  "faster-whisper>=1.1; sys_platform != 'darwin' or platform_machine != 'arm64'",
+]
+
+[dependency-groups]
+dev = ["pytest>=8"]
+
+[tool.uv]
+package = false
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+markers = ["slow: needs a real Whisper model download (run with CLIPFORGE_SLOW=1)"]

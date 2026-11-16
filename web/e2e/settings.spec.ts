@@ -94,3 +94,8 @@ test('every settings section renders', async ({ page }) => {
     await expect(page.locator('h1')).toHaveText('Settings')
   }
 })
+
+test('shows requests made today', async ({ page }) => {
+  await page.goto('/settings/ai')
+  await expect(page.getByTestId('usage-today')).toContainText('Requests today')
+})

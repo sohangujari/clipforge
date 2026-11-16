@@ -42,3 +42,9 @@ test('fmtDuration shows hours past 60 minutes', () => {
   expect(fmtDuration(5832)).toBe('1:37:12')
   expect(fmtDuration(59.6)).toBe('1:00')
 })
+
+import { paragraphs } from '@/components/cf/TranscriptView'
+test('transcript paragraphs split at pauses over 1.5s', () => {
+  const p = paragraphs([{ w: 'a', s: 0, e: 0.5 }, { w: 'b', s: 0.6, e: 1 }, { w: 'c', s: 2.6, e: 3 }])
+  expect(p).toEqual([{ start: 0, text: 'a b' }, { start: 2.6, text: 'c' }])
+})

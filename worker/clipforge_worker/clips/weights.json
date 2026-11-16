@@ -1,0 +1,9 @@
+{
+  "default":  {"hook": 0.30, "emotion": 0.20, "value": 0.25, "pacing": 0.15, "trend": 0.10},
+  "podcast":  {"hook": 0.28, "emotion": 0.17, "value": 0.22, "pacing": 0.12, "trend": 0.06, "extra": {"quotability": 0.15}},
+  "gaming":   {"hook": 0.22, "emotion": 0.15, "value": 0.10, "pacing": 0.13, "trend": 0.05, "extra": {"reaction": 0.20, "action": 0.15}},
+  "reaction": {"hook": 0.25, "emotion": 0.20, "value": 0.12, "pacing": 0.13, "trend": 0.05, "extra": {"reaction": 0.25}},
+  "sports":   {"hook": 0.25, "emotion": 0.20, "value": 0.10, "pacing": 0.15, "trend": 0.05, "extra": {"action": 0.25}},
+  "tutorial": {"hook": 0.25, "emotion": 0.05, "value": 0.45, "pacing": 0.20, "trend": 0.05},
+  "vlog":     {"hook": 0.30, "emotion": 0.30, "value": 0.15, "pacing": 0.15, "trend": 0.10}
+}

@@ -7,9 +7,13 @@ import { createOpenAICompatible } from '@ai-sdk/openai-compatible'
 import { HttpError, mapProviderError, ProviderError, type ProviderErrorCode } from './errors'
 import { DEFAULT_BASE_URL, type ModelInfo, type ProviderConfig } from './types'
 
-const OLLAMA_WARN_BYTES = 4e9
+// Measured on an 8 GB M3: qwen3.5:4b (~4 GB on disk, ~4.4 GB loaded) made the whole Mac laggy while finding clips.
+const OLLAMA_WARN_BYTES = 3e9
 const trim = (u: string) => u.replace(/\/+$/, '')
 const base = (cfg: ProviderConfig) => {
+  if (cfg.kind === 'cloudflare') { // baseUrl holds the account ID; built here so the token can only ever go to Cloudflare
+    return `https://api.cloudflare.com/client/v4/accounts/${(cfg.baseUrl ?? '').replace(/[^a-z0-9]/gi, '')}/ai/v1`
+  }
   const u = trim(cfg.baseUrl || DEFAULT_BASE_URL[cfg.kind] || '')
   return cfg.kind === 'ollama' ? u.replace(/\/v1$/, '') : u // people paste Ollama's OpenAI-compatible URL
 }
@@ -44,6 +48,10 @@ export async function listModels(cfg: ProviderConfig, opts: { totalMem?: number;
           id: m.name, label: m.name, sizeBytes: m.size, ramWarning: m.size > OLLAMA_WARN_BYTES && mem <= 8 * 2 ** 30,
         }))
       }
+      case 'cloudflare': {
+        const j = await getJson(`${base(cfg).replace(/\/v1$/, '')}/models/search?task=Text%20Generation&per_page=100`, bearer(cfg.apiKey), t)
+        return j.result.map((m: { name: string }) => ({ id: m.name, label: m.name }))
+      }
       case 'openai':
       case 'custom': {
         const j = await getJson(`${base(cfg)}/models`, bearer(cfg.apiKey), t)
@@ -68,6 +76,7 @@ export function getModel(cfg: ProviderConfig, modelId: string): LanguageModel {
     case 'google': return createGoogleGenerativeAI({ apiKey: cfg.apiKey })(modelId)
     case 'ollama': return createOpenAICompatible({ name: 'ollama', baseURL: `${base(cfg)}/v1` })(modelId)
     case 'custom': return createOpenAICompatible({ name: 'custom', baseURL: base(cfg), apiKey: cfg.apiKey })(modelId)
+    case 'cloudflare': return createOpenAICompatible({ name: 'cloudflare', baseURL: base(cfg), apiKey: cfg.apiKey, supportsStructuredOutputs: true })(modelId)
   }
 }
 

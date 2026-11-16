@@ -34,6 +34,17 @@ test('google keeps generateContent models and strips prefix', async () => {
   expect(await listModels({ kind: 'google', apiKey: 'k' })).toEqual([{ id: 'gemini-3-pro', label: 'Gemini 3 Pro' }])
 })
 
+test('cloudflare lists text models from its search endpoint and only ever calls api.cloudflare.com', async () => {
+  const f = stubFetch({ success: true, result: [{ name: '@cf/openai/gpt-oss-120b' }, { name: '@cf/google/gemma-4-26b-a4b-it' }] })
+  expect(await listModels({ kind: 'cloudflare', apiKey: 'tok', baseUrl: ' 0123abcd ' })).toEqual([
+    { id: '@cf/openai/gpt-oss-120b', label: '@cf/openai/gpt-oss-120b' }, { id: '@cf/google/gemma-4-26b-a4b-it', label: '@cf/google/gemma-4-26b-a4b-it' }])
+  const [url, init] = f.mock.calls[0] as [string, RequestInit]
+  expect(url).toBe('https://api.cloudflare.com/client/v4/accounts/0123abcd/ai/models/search?task=Text%20Generation&per_page=100')
+  expect((init.headers as Record<string, string>).Authorization).toBe('Bearer tok')
+  await listModels({ kind: 'cloudflare', apiKey: 'tok', baseUrl: 'evil.test/x?' })
+  expect(new URL(f.mock.calls[1][0] as string).host).toBe('api.cloudflare.com') // the account ID can't redirect the token
+})
+
 test('custom uses base url', async () => {
   const f = stubFetch({ data: [{ id: 'llama-3' }] })
   expect(await listModels({ kind: 'custom', baseUrl: 'https://openrouter.ai/api/v1/' })).toEqual([{ id: 'llama-3', label: 'llama-3' }])

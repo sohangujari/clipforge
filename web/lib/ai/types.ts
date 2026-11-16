@@ -1,4 +1,4 @@
-export const PROVIDER_KINDS = ['anthropic', 'openai', 'google', 'ollama', 'custom'] as const
+export const PROVIDER_KINDS = ['anthropic', 'openai', 'google', 'cloudflare', 'ollama', 'custom'] as const
 export type ProviderKind = (typeof PROVIDER_KINDS)[number]
 
 export interface ProviderConfig { kind: ProviderKind; baseUrl?: string; apiKey?: string }
@@ -10,5 +10,5 @@ export const DEFAULT_BASE_URL: Partial<Record<ProviderKind, string>> = {
 }
 
 export const PROVIDER_LABELS: Record<ProviderKind, string> = {
-  anthropic: 'Anthropic (Claude)', openai: 'OpenAI', google: 'Google (Gemini)', ollama: 'Ollama (local)', custom: 'OpenAI-compatible',
+  anthropic: 'Anthropic (Claude)', openai: 'OpenAI', google: 'Google (Gemini)', cloudflare: 'Cloudflare Workers AI', ollama: 'Ollama (local)', custom: 'OpenAI-compatible',
 }

@@ -50,7 +50,7 @@ export function ModelPicker({ kind, value, onChange, ariaLabel, placeholder = 'C
                   <CommandItem key={m.id} value={m.id} keywords={[m.label]} onSelect={() => pick(m.id)}>
                     <Check className={cn('size-4', value === m.id ? 'opacity-100' : 'opacity-0')} />
                     <span className="flex-1 truncate">{m.label}</span>
-                    {m.ramWarning && <span title="Larger than 4 GB — may be slow on an 8 GB Mac" className="flex items-center gap-1 text-xs text-amber-600"><TriangleAlert className="size-3" />May be slow on 8GB</span>}
+                    {m.ramWarning && <span title="Uses most of an 8 GB Mac's memory and the GPU: the whole Mac will lag while it finds clips" className="flex items-center gap-1 text-xs text-amber-600"><TriangleAlert className="size-3" />Will make an 8 GB Mac laggy</span>}
                     {m.sizeBytes && !m.ramWarning && <span className="text-xs text-muted-foreground">{fmtGB(m.sizeBytes)}</span>}
                   </CommandItem>
                 ))}

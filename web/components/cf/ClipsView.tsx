@@ -3,18 +3,21 @@ import { useMemo, useState } from 'react'
 import { SearchX } from 'lucide-react'
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet'
 import { sortClips, type ClipSort } from '@/lib/clips'
-import type { MockClip } from '@/lib/mock'
 import { CfSlider } from './CfSlider'
-import { ClipCard } from './ClipCard'
-import { ClipDetails } from './ClipDetails'
+import { ClipCard, type CardClip } from './ClipCard'
+import { ClipDetails, type RegenField } from './ClipDetails'
 import { EmptyState } from './EmptyState'
 import { Segmented } from './Segmented'
 
-export function ClipsView({ clips, thumbnail }: { clips: MockClip[]; thumbnail: string }) {
+export function ClipsView({ clips, thumbnail, previewSrc, onKeep, onDelete, onRegenerate, tasteCount }: {
+  clips: CardClip[]; thumbnail: string; previewSrc?: string; tasteCount?: number
+  onKeep?: (c: CardClip) => void; onDelete?: (c: CardClip) => void; onRegenerate?: (c: CardClip, f: RegenField) => Promise<void>
+}) {
   const [sort, setSort] = useState<ClipSort>('score')
   const [min, setMin] = useState(0)
-  const [open, setOpen] = useState<MockClip | null>(null)
+  const [openId, setOpenId] = useState<string | null>(null)
   const shown = useMemo(() => sortClips(clips, sort, sort === 'time' ? 'asc' : 'desc').filter((c) => c.score >= min), [clips, sort, min])
+  const open = clips.find((c) => c.id === openId) ?? null
 
   return (
     <div className="flex flex-col gap-5">
@@ -29,17 +32,20 @@ export function ClipsView({ clips, thumbnail }: { clips: MockClip[]; thumbnail: 
       </div>
       {shown.length ? (
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4 lg:grid-cols-4 xl:grid-cols-5">
-          {shown.map((c) => <ClipCard key={c.id} clip={c} thumbnail={thumbnail} onOpen={() => setOpen(c)} />)}
+          {shown.map((c) => (
+            <ClipCard key={c.id} clip={c} thumbnail={thumbnail} previewSrc={previewSrc} onOpen={() => setOpenId(c.id)}
+              onKeep={onKeep && (() => onKeep(c))} onDelete={onDelete && (() => onDelete(c))} />
+          ))}
         </div>
-      ) : (
+      ) : clips.length ? (
         <EmptyState icon={<SearchX />} title="No clips at this score" body="Lower the minimum score to see more clips." />
-      )}
-      <Sheet open={!!open} onOpenChange={(o) => !o && setOpen(null)}>
+      ) : null}
+      <Sheet open={!!open} onOpenChange={(o) => !o && setOpenId(null)}>
         <SheetContent className="w-full overflow-y-auto sm:max-w-md">
           {open && (
             <>
-              <SheetHeader><SheetTitle>{open.titles[0]}</SheetTitle><SheetDescription>Viral score breakdown and copy for each platform.</SheetDescription></SheetHeader>
-              <div className="px-4 pb-6"><ClipDetails clip={open} /></div>
+              <SheetHeader><SheetTitle>{open.titles[0]}</SheetTitle><SheetDescription>Why it scored this way, and copy for each platform.</SheetDescription></SheetHeader>
+              <div className="px-4 pb-6"><ClipDetails clip={open} tasteCount={tasteCount} onRegenerate={onRegenerate && ((f) => onRegenerate(open, f))} /></div>
             </>
           )}
         </SheetContent>

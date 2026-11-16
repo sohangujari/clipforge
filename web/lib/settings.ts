@@ -5,6 +5,10 @@ import { PROVIDER_KINDS } from './ai/types'
 import { SubtitleStyleSchema } from './subtitle-presets'
 import { CONTENT_TYPES, POSITIONS, TONES } from './constants'
 
+/** Names and brand words fed to Whisper's prompt. Trimmed, empties dropped, ≤ 50 × 40 chars. */
+export const VocabularySchema = z.array(z.string()).transform((a) => a.map((w) => w.trim()).filter(Boolean)).pipe(z.array(z.string().max(40)).max(50))
+export const CAPTION_SCRIPTS = ['native', 'hinglish'] as const
+
 const taskModel = z.object({ provider: z.enum(PROVIDER_KINDS), model: z.string().min(1) }).nullable()
 
 
@@ -32,7 +36,11 @@ export const schemas = {
     tone: z.enum(TONES).default('neutral'),
     contentType: z.enum(CONTENT_TYPES).default('auto'),
     whisperModel: z.enum(['large-v3-turbo', 'medium', 'small']).default('large-v3-turbo'),
-  }).default({ clipCount: 'auto', lengthRange: [30, 90], language: 'auto', tone: 'neutral', contentType: 'auto', whisperModel: 'large-v3-turbo' }),
+    vocabulary: VocabularySchema.default([]),
+    captionScript: z.enum(CAPTION_SCRIPTS).default('native'),
+  }).default({ clipCount: 'auto', lengthRange: [30, 90], language: 'auto', tone: 'neutral', contentType: 'auto', whisperModel: 'large-v3-turbo', vocabulary: [], captionScript: 'native' }),
+  /** Requests per provider:model for the current Pacific-time day (free tiers reset at midnight Pacific). */
+  llmUsage: z.object({ date: z.string().default(''), counts: z.record(z.string(), z.number()).default({}) }).default({ date: '', counts: {} }),
   profile: z.object({ name: z.string().max(80).default(''), handle: z.string().max(40).default('') }).default({ name: '', handle: '' }),
 }
 

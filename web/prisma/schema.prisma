@@ -21,3 +21,75 @@ model Setting {
   value     String
   updatedAt DateTime @updatedAt
 }
+
+/// Written by Next; the Python worker updates status/title/durationSec/language/warning/sourceFile with raw SQL.
+model Project {
+  id          String   @id
+  title       String
+  sourceType  String // 'url' | 'upload'
+  sourceUrl   String?
+  sourceFile  String? // relative to data/, e.g. media/<id>/source.mp4
+  status      String   @default("queued") // queued | processing | ready | failed | cancelled
+  durationSec Float?
+  language    String?
+  contentType String   @default("auto")
+  settings    String // JSON ProjectSettings
+  warning     String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  jobs        Job[]
+  clips       Clip[]
+}
+
+/// The queue. The worker claims rows with raw SQL; column names are a contract.
+model Job {
+  id        String    @id
+  projectId String
+  project   Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  type      String    @default("ingest")
+  status    String    @default("queued") // queued | running | done | failed | cancel_requested | cancelled
+  stage     String? // importing | preparing | transcribing | romanizing
+  stageDone String    @default("[]") // JSON array of finished stages (checkpoints)
+  progress  Float     @default(0)
+  message   String?
+  error     String?
+  heartbeat DateTime?
+  payload   String? // JSON, e.g. {"query": "..."} for search jobs
+  attempts  Int       @default(0) // claims so far; the worker gives up after 3 (e.g. repeated out-of-memory kills)
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  @@index([status, createdAt])
+}
+
+/// Written by the worker (raw SQL) — column names are a contract. JSON columns are strings.
+model Clip {
+  id           String   @id
+  projectId    String
+  project      Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  startSec     Float
+  endSec       Float
+  score        Float // overall 0–100, computed in code
+  breakdown    String // {hook, emotion, value, pacing, trend, extra?, reasons, signals_used?}
+  reason       String
+  tips         String // string[]
+  titles       String // [s, s, s]
+  descriptions String // {shorts, tiktok, reels}
+  hashtags     String // string[]
+  signals      String // {laughter, applause, cheering, energy, pace} z-scores
+  source       String   @default("auto") // auto | search
+  query        String?
+  status       String   @default("new") // new | kept | deleted
+  createdAt    DateTime @default(now())
+
+  @@index([projectId, score])
+}
+
+/// Taste learning: one row per keep/delete, used as few-shot examples.
+model ClipFeedback {
+  id          String   @id
+  contentType String
+  action      String // kept | deleted
+  summary     String
+  createdAt   DateTime @default(now())
+}

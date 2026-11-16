@@ -41,7 +41,7 @@ test('never leaks key', async () => {
 
 test('ollama default', async () => {
   const views = await (await store()).listProviderViews()
-  expect(views.map((v) => v.kind)).toEqual(['anthropic', 'openai', 'google', 'ollama', 'custom'])
+  expect(views.map((v) => v.kind)).toEqual(['anthropic', 'openai', 'google', 'cloudflare', 'ollama', 'custom'])
   expect(views.find((v) => v.kind === 'ollama')?.baseUrl).toBe('http://localhost:11434')
   expect(views.find((v) => v.kind === 'ollama')?.needsKey).toBe(false)
   expect(views.find((v) => v.kind === 'anthropic')?.needsKey).toBe(true)
