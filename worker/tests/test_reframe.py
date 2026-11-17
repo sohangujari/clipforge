@@ -74,7 +74,9 @@ def test_video_without_faces_runs_mediapipe_and_centres(conn, data_dir, clips):
     F.run(ctx_for(conn))
     faces = json.loads((md / "faces.json").read_text())
     assert faces["fps"] == 2 and 235 <= len(faces["frames"]) <= 242 and not any(faces["frames"])
-    assert json.loads((md / "track.json").read_text()) == {"keyframes": [[0.0, 0.5, 0.5]]}
+    track = json.loads((md / "track.json").read_text())
+    assert track["keyframes"] == [[0.0, 0.5, 0.5]]
+    assert len(track["wide"]) == 1 and track["wide"][0][0] == 0 and track["wide"][0][1] >= 117  # no face anywhere: whole-frame view
 
 
 def test_camera_cut_jumps_instantly_instead_of_panning():
@@ -84,9 +86,17 @@ def test_camera_cut_jumps_instantly_instead_of_panning():
     assert center_at(k, 9.99)[0] == 0.3 and center_at(k, 10.01)[0] == 0.7
 
 
-def test_cut_into_a_shot_without_a_face_keeps_the_crop():
+def test_cut_into_a_shot_without_a_face_centres_the_crop():
+    # A wide shot whose faces are too small to find: the last shot's face position means nothing in it.
     k = smooth_track([face(0.3)] * 20 + [None] * 20, FPS, cuts=[10.0])
-    assert k == [(0.0, 0.3, 0.4)]
+    assert center_at(k, 9.9) == (0.3, 0.4) and center_at(k, 10.1) == (0.5, 0.5)
+
+
+def test_a_talking_head_that_sways_does_not_keep_panning():
+    import math
+    # head and body move ±0.06 of the frame over a few seconds, as people do while talking: the crop should hold
+    k = smooth_track([face(0.5 + 0.06 * math.sin(i / 4)) for i in range(120)], FPS)
+    assert len(k) == 1
 
 
 def test_cuts_are_found_at_the_right_frame(tmp_path):
@@ -114,3 +124,21 @@ def test_face_detection_failure_never_fails_the_job(conn, data_dir, clips, monke
 def test_crop_rect_scale_matches_the_editor():  # web/tests/reframe.test.ts
     assert crop_rect(0.3, 0.4, 1920, 1080, 9 / 8, 0.5) == (272, 162, 606, 540)
     assert crop_rect(0.95, 0.5, 1920, 1080, 9 / 8, 0.45) == (1374, 296, 546, 486)
+
+
+def test_cuts_are_found_in_a_very_dark_video(tmp_path):
+    """A black-background studio: brightness ~3/255, so the frames barely differ in level; the picture changes completely."""
+    import subprocess
+    v = tmp_path / "dark.mp4"
+    dark = "eq=brightness=-0.47:contrast=0.3"
+    subprocess.run(["ffmpeg", "-v", "error", "-f", "lavfi", "-i", "testsrc2=s=320x180:d=2:r=25", "-f", "lavfi", "-i", "smptehdbars=s=320x180:d=2:r=25",
+                    "-filter_complex", f"[0]{dark}[a];[1]{dark}[b];[a][b]concat=n=2:v=1", "-pix_fmt", "yuv420p", str(v)], check=True)
+    cuts = F.find_cuts(v)
+    assert len(cuts) == 1 and abs(cuts[0] - 2.0) <= 0.04
+
+
+def test_shots_with_no_face_at_all_are_listed_for_a_full_frame_view():
+    from clipforge_worker.clips.reframe import faceless_shots
+    every = [[]] * 6 + [[face(0.3)]] * 10 + [[]] * 10 + [[]] * 4  # wide (0–3 s), close-up, wide (8–13 s), 2 s tail
+    assert faceless_shots(every, FPS, cuts=[3.0, 8.0, 13.0]) == [[0.0, 3.0], [8.0, 15.0]]  # back-to-back faceless shots merge
+    assert faceless_shots([[face(0.3)]] * 4 + [[]] + [[face(0.3)]] * 4, FPS, cuts=[]) == []  # a dropout inside a shot isn't a wide shot

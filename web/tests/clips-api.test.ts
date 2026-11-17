@@ -206,14 +206,14 @@ test('an edit may leave out the brand kit (then the current Settings apply)', as
   expect((await res.json()).edit.brand).toBeUndefined()
 })
 
-test('an unopened clip exports with fillers and pauses cut, zooms on the AI keywords and the AI hook line', async () => {
+test('an unopened clip exports with fillers and pauses cut, zooms on the AI keywords; the AI hook line is written but off', async () => {
   const { p, ids } = await projectWithClips()
   writeFileSync(join(dir, 'media', p.id, 'silences.json'), JSON.stringify({ silences: [[20, 22], [100, 101]] }))
   const d = await db()
   await d.clip.update({ where: { id: ids[0] }, data: { hook: 'Nobody saw this coming', keywords: '["world"]' } })
   const { jobId } = await (await post('@/app/api/clips/[id]/export/route', ids[0], { resolution: '1080p' })).json()
   const e = JSON.parse((await d.job.findUniqueOrThrow({ where: { id: jobId } })).payload!).edits[ids[0]]
-  expect(e).toMatchObject({ removeFillers: true, removePauses: true, autoZoom: true, bumpers: true, hook: { on: true, text: 'Nobody saw this coming' } })
+  expect(e).toMatchObject({ removeFillers: true, removePauses: true, autoZoom: true, bumpers: true, hook: { on: false, text: 'Nobody saw this coming' } })
   expect(e.keep).toEqual([[10, 20.12], [21.88, 40]])
   expect(e.zooms).toEqual([[10.5, 11.5]])
   const { jobId: j2 } = await (await post('@/app/api/clips/[id]/export/route', ids[1], { resolution: '1080p' })).json()

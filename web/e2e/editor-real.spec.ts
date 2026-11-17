@@ -87,11 +87,13 @@ test('a change made right before leaving the editor is still saved', async ({ pa
   await expect(page.getByRole('button', { name: /Neon/ }).first()).toHaveAttribute('aria-pressed', 'true')
 })
 
-test('auto edits: on by default, and switching them off is saved with the clip', async ({ page }) => {
+test('auto edits: cuts on and the hook line off by default; changes are saved with the clip', async ({ page }) => {
   const id = editorUrl.split('/').pop()
   await page.goto(editorUrl)
   await page.getByRole('button', { name: 'AI', exact: true }).click()
-  for (const name of ['Remove filler words (um, uh)', 'Remove long pauses', 'Hook line at the start']) await expect(page.getByRole('switch', { name })).toBeChecked()
+  for (const name of ['Remove filler words (um, uh)', 'Remove long pauses']) await expect(page.getByRole('switch', { name })).toBeChecked()
+  await expect(page.getByRole('switch', { name: 'Hook line at the start' })).not.toBeChecked()
+  await page.getByRole('switch', { name: 'Hook line at the start' }).click()
   await expect(page.getByRole('textbox', { name: 'Hook text' })).not.toHaveValue('')
   const edit = async () => (await (await page.request.get(`/api/clips/${id}`)).json()).edit
   await page.getByRole('textbox', { name: 'Hook text' }).fill('Watch till the end')

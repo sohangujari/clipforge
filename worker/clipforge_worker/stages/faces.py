@@ -8,7 +8,7 @@ import urllib.request
 
 import numpy as np
 
-from ..clips.reframe import smooth_track
+from ..clips.reframe import faceless_shots, smooth_track
 from ..errors import Cancelled
 from ..media import probe
 
@@ -32,8 +32,27 @@ def _model(data_dir) -> str:
 
 
 CUT_FPS, CUT_W, CUT_H = 25, 64, 36
-CUT_DIFF = 12      # mean |Δ| of tiny grey frames: ordinary frames < 4, camera cuts 15–30 (measured on a dark-studio podcast)
+CUT_DIFF = 12      # mean |Δ| of tiny grey frames: ordinary frames < 4, camera cuts 15–30 (catches cuts between flat frames)
+CUT_DECORREL = 0.5  # 1 − correlation of consecutive frames' patterns: a new shot ~0.9+, motion within a shot < 0.3. Brightness-free,
+#                     so cuts in a black-background studio (mean level 3/255, |Δ| ~8) are found; the old |Δ| test missed them
+CUT_MIN_STD = 1.0  # flat (near-blank) frames have no pattern to compare
 CUT_GAP_S = 0.5    # flashes and fades produce runs of big diffs: keep the first
+
+
+def _decorrelation(a: np.ndarray, b: np.ndarray) -> float:
+    za, zb = a - a.mean(), b - b.mean()
+    sa, sb = float(np.sqrt((za ** 2).mean())), float(np.sqrt((zb ** 2).mean()))
+    if max(sa, sb) < CUT_MIN_STD:
+        return 0.0
+    return 1.0 - float((za * zb).mean()) / max(sa * sb, 1e-6)
+
+
+def _is_cut(a: np.ndarray, b: np.ndarray) -> bool:
+    """Frames with a picture: their patterns stop matching (fast motion keeps them matching; a brightness test doesn't —
+    it fired 220 times on 10 minutes of gameplay). Near-blank frames have no pattern: a big level change, then."""
+    if max(a.std(), b.std()) < CUT_MIN_STD:
+        return float(np.abs(a - b).mean()) > CUT_DIFF
+    return _decorrelation(a, b) > CUT_DECORREL
 
 
 def find_cuts(proxy) -> list[float]:
@@ -43,8 +62,8 @@ def find_cuts(proxy) -> list[float]:
     cuts, prev, n, size = [], None, 0, CUT_W * CUT_H
     try:
         while (buf := proc.stdout.read(size)) and len(buf) == size:
-            f = np.frombuffer(buf, np.uint8).astype(np.int16)
-            if prev is not None and np.abs(f - prev).mean() > CUT_DIFF:
+            f = np.frombuffer(buf, np.uint8).astype(np.float32)
+            if prev is not None and _is_cut(f, prev):
                 t = n / CUT_FPS
                 if not cuts or t - cuts[-1] >= CUT_GAP_S:
                     cuts.append(round(t, 3))
@@ -111,5 +130,5 @@ def _detect(ctx) -> None:
     ctx.report(0.99, "Finding camera cuts")
     cuts = find_cuts(proxy)
     _write(md / "faces.json", {"fps": FPS, "w": v["width"], "h": v["height"], "frames": frames, "all": every, "cuts": cuts})
-    _write(md / "track.json", {"keyframes": smooth_track(frames, FPS, cuts)})
+    _write(md / "track.json", {"keyframes": smooth_track(frames, FPS, cuts), "wide": faceless_shots(frames, FPS, cuts)})  # sure faces only
     ctx.report(1.0)

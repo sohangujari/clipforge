@@ -38,7 +38,7 @@ function Region({ r, thumbnail }: { r: ThumbRect; thumbnail: string }) {
   )
 }
 
-export interface RealMedia { src: string; track: Keyframe[]; playing: boolean; onTime: (t: number) => void; videoRef: RefObject<HTMLVideoElement | null>; keep: Range[]; zooms: Range[]; people: People | null }
+export interface RealMedia { src: string; track: Keyframe[]; playing: boolean; onTime: (t: number) => void; videoRef: RefObject<HTMLVideoElement | null>; keep: Range[]; zooms: Range[]; people: People | null; wide: Range[] }
 
 export const HOOK_S = 3 // the hook line shows over the first seconds (worker/clipforge_worker/stages/render.py)
 
@@ -78,7 +78,7 @@ export function CanvasFrame({ state, t, thumbnail, className, testIds = true, re
       {real ? (
         <>
           <ClipVideo src={real.src} track={speakerLayout ? real.people!.track : real.track} aspect={state.aspect} layout={state.layoutId as RealLayout}
-            keep={real.keep} zooms={zoomable ? real.zooms : NO_ZOOM} rows={rowsFor(state, real.people)}
+            keep={real.keep} zooms={zoomable ? real.zooms : NO_ZOOM} rows={rowsFor(state, real.people)} wide={real.wide}
             t={t} playing={real.playing} onTime={real.onTime} videoRef={real.videoRef} />
           <AssOverlay ass={ass} videoRef={real.videoRef} keep={real.keep} />
         </>

@@ -105,7 +105,8 @@ def run(ctx) -> None:
     if not (ctx.media_dir / "track.json").exists():
         faces.run(ctx)  # projects from before Phase 4
     track = ctx.media_dir / "track.json"
-    keyframes = json.loads(track.read_text())["keyframes"] if track.exists() else [[0, 0.5, 0.5]]  # face detection failed: centre
+    tj = json.loads(track.read_text()) if track.exists() else {"keyframes": [[0, 0.5, 0.5]]}  # face detection failed: centre
+    keyframes, wide = tj["keyframes"], tj.get("wide", [])
     people = _people(ctx, payload, ids)
     brand_kit = _brand_kit(ctx.conn)
     words = json.loads((ctx.media_dir / "transcript.json").read_text())["words"]
@@ -139,7 +140,7 @@ def run(ctx) -> None:
                                                    "middle": middle_ranges([r for r in rows["ranges"] if r[1] > start and r[0] < end], keep,
                                                                            edit["aspect"] != "16:9") if rows else None}))
         cmd = build_command(src, out_name, edit, kf, info["width"], info["height"], start, end, _logo(ctx, edit), ass_name, encoder(),
-                            keep=rel, zooms=zooms, fps=info["fps"], has_audio=info["has_audio"], bumpers=(intro, outro), rows=rows)
+                            keep=rel, zooms=zooms, fps=info["fps"], has_audio=info["has_audio"], bumpers=(intro, outro), rows=rows, wide=wide)
         proc = subprocess.Popen(cmd, cwd=out_dir, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
         try:
             for line in proc.stdout:

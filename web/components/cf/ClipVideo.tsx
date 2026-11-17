@@ -14,6 +14,8 @@ export function nextPlayable(keep: Range[], t: number): number {
   return keep[0][0]
 }
 
+const NONE: Range[] = []
+
 export type RealLayout = 'single' | 'wide-blur' | 'active-speaker' | 'split' | 'grid'
 export type Rows = { plan: RowPlan; faceH: number | null }
 
@@ -21,14 +23,16 @@ export type Rows = { plan: RowPlan; faceH: number | null }
  * The proxy video inside the editor frame, cropped the way the export will crop it (same track, same maths).
  * The crop is applied straight to the element every frame (no React re-render); onTime reports ~15×/s for the timeline.
  */
-export function ClipVideo({ src, track, aspect, layout, keep, zooms, rows, t, playing, onTime, videoRef }: {
+export function ClipVideo({ src, track, aspect, layout, keep, zooms, rows, wide = NONE, t, playing, onTime, videoRef }: {
   src: string; track: Keyframe[]; aspect: Aspect; layout: RealLayout; keep: Range[]; zooms: Range[]; rows?: Rows | null
+  /** shots with no face found: shown whole over a blurred fill, as the export does */
+  wide?: Range[]
   t: number; playing: boolean; onTime: (t: number) => void; videoRef: RefObject<HTMLVideoElement | null>
 }) {
   const blurRef = useRef<HTMLCanvasElement>(null)
   const rowsRef = useRef<HTMLCanvasElement>(null)
-  const live = useRef({ track, aspect, layout, keep, zooms, rows, onTime })
-  useEffect(() => { live.current = { track, aspect, layout, keep, zooms, rows, onTime } })
+  const live = useRef({ track, aspect, layout, keep, zooms, rows, wide, onTime })
+  useEffect(() => { live.current = { track, aspect, layout, keep, zooms, rows, wide, onTime } })
 
   /** Split/Grid while 2–3 people are on screen: each person's crop drawn into a row (a column at 16:9), as the export's
    * vstack does; the talker's row outlined in Grid. Returns false when the single crop should show instead. */
@@ -62,7 +66,9 @@ export function ClipVideo({ src, track, aspect, layout, keep, zooms, rows, t, pl
     v.style.visibility = rowsOn ? 'hidden' : '' // still plays the sound and drives the clock
     if (rowsRef.current) rowsRef.current.style.display = rowsOn ? '' : 'none'
     if (rowsOn) return
-    if (l !== 'wide-blur') {
+    const whole = l === 'wide-blur' || live.current.wide.some(([s, e]) => v.currentTime >= s && v.currentTime < e)
+    if (blurRef.current) blurRef.current.style.display = whole ? '' : 'none'
+    if (!whole) {
       const [cx, cy] = centerAt(k, v.currentTime)
       const [x, y, w, h] = cropRect(cx, cy, v.videoWidth, v.videoHeight, ASPECT_RATIO[a])
       const z = zoomAt(zs, v.currentTime) // punch-in about the frame's centre, as FFmpeg's zoompan does
@@ -73,7 +79,7 @@ export function ClipVideo({ src, track, aspect, layout, keep, zooms, rows, t, pl
       const c = blurRef.current
       c?.getContext('2d')?.drawImage(v, 0, 0, c.width, c.height)
     }
-    if (l !== 'wide-blur') v.style.transform = ''
+    if (!whole) v.style.transform = ''
   }
 
   // Play/pause, skip the cut parts, loop, and keep the crop moving while playing.
@@ -106,10 +112,8 @@ export function ClipVideo({ src, track, aspect, layout, keep, zooms, rows, t, pl
 
   return (
     <>
-      {layout === 'wide-blur' && (
-        <canvas ref={blurRef} data-testid="clip-video-blur" width={48} height={86} aria-hidden
-          className="absolute inset-0 size-full scale-125 object-cover opacity-80 blur-xl" />
-      )}
+      <canvas ref={blurRef} data-testid="clip-video-blur" width={48} height={86} aria-hidden style={{ display: layout === 'wide-blur' ? undefined : 'none' }}
+        className="absolute inset-0 size-full scale-125 object-cover opacity-80 blur-xl" />
       {(layout === 'split' || layout === 'grid') && <canvas ref={rowsRef} data-testid="clip-video-rows" aria-hidden className="absolute inset-0 size-full" />}
       <video ref={videoRef} data-testid="clip-video" src={src} muted={false} playsInline preload="auto" className="absolute max-w-none"
         onLoadedMetadata={(e) => { e.currentTarget.currentTime = t; apply() }} onSeeked={apply} />

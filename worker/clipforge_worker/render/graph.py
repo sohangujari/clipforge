@@ -97,7 +97,7 @@ def _rows(F: str, W: int, H: int, edit: dict, keyframes, rows: dict, start: floa
 
 def build_command(src: Path, out_name: str, edit: dict, keyframes, src_w: int, src_h: int, start: float, end: float,
                   logo: Path | None, ass_name: str, encoder: str, keep=None, zooms=(), fps: float = 30.0, has_audio: bool = True,
-                  bumpers=(), rows: dict | None = None) -> list[str]:
+                  bumpers=(), rows: dict | None = None, wide=()) -> list[str]:
     """Run with cwd = the renders folder: ass_name and '.fonts' are relative there, so no path needs filtergraph escaping.
     keep / zooms: clip-relative seconds (the cut list and punch-ins the editor saved). bumpers: [(path, has_audio, duration)]
     for the intro and outro, in order around the clip. Crop and zoom run on the uncut clock; the cuts come after them."""
@@ -112,6 +112,13 @@ def build_command(src: Path, out_name: str, edit: dict, keyframes, src_w: int, s
         a = ASPECT[edit["aspect"]]
         zoom = (f",zoompan=z='{zoom_expr(zooms)}':x='iw/2-iw/zoom/2':y='ih/2-ih/zoom/2':d=1:s={W}x{H}:fps={F},setsar=1" if zooms else "")
         video = f"[0:v]fps={F},{_crop(keyframes, start, dur, src_w, src_h, a)},scale={W}:{H},setsar=1{zoom}[v0]"
+    wide = in_clip(wide, start, dur) if edit["layoutId"] != "wide-blur" else []
+    if wide:  # shots with no face found (people too small): the whole frame over a blurred fill, not a crop that cuts them off
+        en = "+".join(f"between(t,{_fmt(a)},{_fmt(b)})" for a, b in wide)
+        video = (f"[0:v]split[vin][wsrc];" + video.replace("[0:v]", "[vin]", 1)[: -len("[v0]")] + "[vcrop];"
+                 f"[wsrc]fps={F},split[wa][wb];[wa]scale={W}:{H}:force_original_aspect_ratio=increase,crop={W}:{H},boxblur=20:2,eq=brightness=-0.12[wbg];"
+                 f"[wb]scale={W}:{H}:force_original_aspect_ratio=decrease[wfg];[wbg][wfg]overlay=(W-w)/2:(H-h)/2,setsar=1[wfull];"
+                 f"[vcrop][wfull]overlay=0:0:enable='{en}'[v0]")
     parts = [video]
     # Cuts: one trim per kept part, joined. Cut points sit on the frame grid so sound and picture stay the same length.
     snap = lambda t: _fmt(round(t * fps) / fps)  # noqa: E731

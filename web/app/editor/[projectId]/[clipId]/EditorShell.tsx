@@ -33,16 +33,18 @@ const PANELS: Record<SectionId, (p: PanelProps) => React.ReactNode> = {
 
 export interface RealClip { proxyUrl: string; trackUrl: string; peopleUrl: string; edit?: ClipEdit; silences: Range[]; keywords: string[]; hook?: string }
 type Props = { project: MockProject; clip: MockClip; clips: MockClip[]; real?: RealClip }
-type Loaded = { state: EditorState; track: Keyframe[]; settingsBrand: EditorState['brand']; people: People | null }
+type Track = { keyframes: Keyframe[]; wide: Range[] }
+type Loaded = { state: EditorState; track: Track; settingsBrand: EditorState['brand']; people: People | null }
 
 
 /** Loads saved brand kit + default subtitle preset, then mounts the editor with them as the first undo state. */
 export function EditorShell(props: Props) {
   const [initial, setInitial] = useState<Loaded | null>(null)
   useEffect(() => {
-    const track: Promise<Keyframe[]> = props.real
-      ? fetch(props.real.trackUrl).then((r) => (r.ok ? r.json() : { keyframes: [[0, 0.5, 0.5]] })).then((j) => j.keyframes).catch(() => [[0, 0.5, 0.5]])
-      : Promise.resolve([[0, 0.5, 0.5]])
+    const none: Track = { keyframes: [[0, 0.5, 0.5]], wide: [] }
+    const track: Promise<Track> = props.real
+      ? fetch(props.real.trackUrl).then((r) => (r.ok ? r.json() : none)).then((j) => ({ keyframes: j.keyframes, wide: j.wide ?? [] })).catch(() => none)
+      : Promise.resolve(none)
     const people: Promise<People | null> = props.real ? fetch(props.real.peopleUrl).then((r) => (r.ok ? r.json() : null)).catch(() => null) : Promise.resolve(null)
     Promise.all([fetch('/api/settings/brandKit').then((r) => r.json()), fetch('/api/settings/subtitlePresets').then((r) => r.json())])
       .catch(() => [undefined, undefined])
@@ -59,7 +61,7 @@ export function EditorShell(props: Props) {
           words: props.clip.transcript, safeZone: 'off', resolution: '1080p',
           // Phase 4b: on by default — clips come out tight and punchy without hand editing (same defaults as lib/exports.ts)
           removeFillers: true, removePauses: true, autoZoom: true, bumpers: true,
-          hook: { on: !!props.real, text: props.real?.hook ?? props.clip.titles[0] ?? '' },
+          hook: { on: false, text: props.real?.hook ?? props.clip.titles[0] ?? '' },
         }
         const saved: Partial<ClipEdit> = { ...e }
         delete saved.keep; delete saved.zooms // derived from the switches; worked out again here
@@ -82,7 +84,7 @@ export function EditorShell(props: Props) {
   )
 }
 
-function Editor({ project, clip, clips, initial, real, track, settingsBrand, people }: Props & { initial: EditorState; track: Keyframe[]; settingsBrand: EditorState['brand']; people: People | null }) {
+function Editor({ project, clip, clips, initial, real, track, settingsBrand, people }: Props & { initial: EditorState; track: Track; settingsBrand: EditorState['brand']; people: People | null }) {
   const [h, dispatch] = useReducer(historyReducer<EditorState>, initial, initHistory)
   const [section, setSection] = useState<SectionId>('subtitles')
   const [t, setT] = useState(initial.trim.start)
@@ -122,7 +124,7 @@ function Editor({ project, clip, clips, initial, real, track, settingsBrand, peo
     return () => cancelAnimationFrame(raf)
   }, [playing, real, state.trim.start, state.trim.end])
 
-  const video = real ? { src: real.proxyUrl, track, people, playing, onTime: setT, videoRef, ...cuts } : undefined
+  const video = real ? { src: real.proxyUrl, track: track.keyframes, wide: track.wide, people, playing, onTime: setT, videoRef, ...cuts } : undefined
   // Real clips: no second preview in the side panel (a second video + libass instance is too heavy for 8 GB).
   const frame = (cls: string, testIds = true) => (real && !testIds ? null
     : <CanvasFrame state={state} t={t} thumbnail={project.thumbnail} className={cls} testIds={testIds} real={video} />)

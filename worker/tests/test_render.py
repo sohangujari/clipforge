@@ -261,3 +261,17 @@ def test_split_rows_crop_each_person_and_subtitles_move_to_the_divider(tmp_path)
     g = cmd[cmd.index("-filter_complex") + 1]
     assert "vstack=inputs=2" in g and "enable='between(t,0,8)'" in g  # only the part of the range inside the clip, clip-relative
     assert g.count("crop=w=776:h=690") == 2  # a tight row crop per person (3.2 face heights), not the full-height 9:8
+
+
+def test_a_shot_with_no_face_shows_the_whole_frame_over_a_blur(conn, data_dir, clips):
+    pid = project(conn, data_dir, clips)
+    md = data_dir / "media" / pid
+    (md / "track.json").write_text(json.dumps({"keyframes": [[0, 0.3, 0.4]], "wide": [[1.0, 2.5]]}))
+    cid = add_clip(conn, pid, edit())
+    assert render(conn, pid, [cid])["status"] == "done"
+    out = data_dir / "renders" / f"{cid}-1080p.mp4"
+    assert size_of(out) == (1080, 1920) and abs(float(probe(out)["format"]["duration"]) - 4.0) < 0.15
+    from clipforge_worker.render.graph import build_command
+    g = build_command(Path("s.mp4"), "o.mp4", edit(), [[0, 0.3, 0.4]], 1280, 720, 0.5, 4.5, None, "a.ass", "libx264", wide=[[1.0, 2.5], [9, 10]])
+    g = g[g.index("-filter_complex") + 1]
+    assert "boxblur" in g and "enable='between(t,0.5,2)'" in g  # clip-relative, and only the wide shot inside the clip

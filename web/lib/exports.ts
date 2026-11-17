@@ -14,7 +14,7 @@ export const Resolution = z.object({ resolution: z.enum(['1080p', '720p']) })
 type ClipRow = { projectId: string; startSec: number; endSec: number; titles: string; hook: string | null; keywords: string | null }
 
 /** Editor defaults for a clip never opened in the editor: brand kit + default subtitle preset, 9:16 face crop, fillers and
- * pauses cut, auto-zoom and the AI hook line on — the same as the editor starts with (EditorShell). */
+ * pauses cut, auto-zoom on, the AI hook line written but off — the same as the editor starts with (EditorShell). */
 async function defaultEdit(clip: ClipRow, resolution: ClipEdit['resolution']): Promise<ClipEdit> {
   const [brand, presets] = await Promise.all([getSetting('brandKit'), getSetting('subtitlePresets')])
   const style = [...builtinPresets, ...presets.custom].find((p) => p.id === presets.defaultId) ?? builtinPresets[0]
@@ -22,7 +22,7 @@ async function defaultEdit(clip: ClipRow, resolution: ClipEdit['resolution']): P
   const words = readWords(clip.projectId).filter((w) => w.s >= trim.start - 0.05 && w.e <= trim.end + 0.05)
   const on = { removeFillers: true, removePauses: true, autoZoom: true }
   return { aspect: '9:16', layoutId: defaultLayout(readPeople(clip.projectId)), style, subtitlesOn: true, watermarkOn: true, brand, trim, resolution, ...on, bumpers: true,
-    hook: { on: true, text: clip.hook ?? JSON.parse(clip.titles)[0] ?? '' },
+    hook: { on: false, text: clip.hook ?? JSON.parse(clip.titles)[0] ?? '' }, // off unless switched on: a text box over the opening covers the speaker
     ...derive({ trim, words, ...on }, { silences: readSilences(clip.projectId), keywords: clip.keywords ? JSON.parse(clip.keywords) : [] }) }
 }
 
