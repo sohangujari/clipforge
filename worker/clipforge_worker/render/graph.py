@@ -3,7 +3,7 @@ Crop maths = clips/reframe.py, the same as the editor preview (web/lib/reframe.t
 import re
 from pathlib import Path
 
-from ..clips.reframe import center_at, crop_rect
+from ..clips.reframe import center_at, crop_rect, row_scale
 from .cuts import zoom_expr
 
 ASPECT = {"9:16": 9 / 16, "1:1": 1.0, "16:9": 16 / 9}
@@ -19,10 +19,10 @@ def _fmt(n: float) -> str:
     return f"{n:.3f}".rstrip("0").rstrip(".")
 
 
-def crop_x_expr(keyframes, t0: float, dur: float, src_w: int, src_h: int, aspect: float, axis: int = 0) -> str:
+def crop_x_expr(keyframes, t0: float, dur: float, src_w: int, src_h: int, aspect: float, axis: int = 0, scale: float = 1.0) -> str:
     """Crop x (axis 0) or y (axis 1) as an FFmpeg expression of t (clip-relative): piecewise linear between the
     track's keyframes inside the clip, ≤ MAX_SEGMENTS segments. A still crop is a plain number."""
-    at = lambda tau: crop_rect(*center_at(keyframes, t0 + tau), src_w, src_h, aspect)[axis]  # noqa: E731
+    at = lambda tau: crop_rect(*center_at(keyframes, t0 + tau), src_w, src_h, aspect, scale)[axis]  # noqa: E731
     taus = [0.0] + [k[0] - t0 for k in keyframes if t0 < k[0] < t0 + dur] + [dur]
     pts = []
     for tau in taus:
@@ -50,24 +50,68 @@ def _logo_xy(pos: str, m: int) -> tuple[str, str]:
     return x, y
 
 
+def _crop(keyframes, start, dur, src_w, src_h, aspect, scale=1.0) -> str:
+    _, _, cw, ch = crop_rect(0.5, 0.5, src_w, src_h, aspect, scale)
+    x, y = (crop_x_expr(keyframes, start, dur, src_w, src_h, aspect, axis, scale) for axis in (0, 1))
+    return f"crop=w={cw}:h={ch}:x='{x}':y='{y}'"
+
+
+def in_clip(ranges, start: float, dur: float) -> list:
+    """Plan ranges [s, e, …] cut to the clip, made clip-relative."""
+    return [[max(r[0], start) - start, min(r[1], start + dur) - start, *r[2:]] for r in ranges if r[1] > start and r[0] < start + dur]
+
+
+def _rows(F: str, W: int, H: int, edit: dict, keyframes, rows: dict, start: float, dur: float, src_w: int, src_h: int) -> str | None:
+    """Split / Grid: while 2–3 people are on screen, each gets a row (columns at 16:9) on their own crop path; otherwise the
+    active-speaker crop. Grid outlines whoever is talking. rows = people.json's plan for the layout + faceH."""
+    ranges = in_clip(rows["ranges"], start, dur)
+    ks = sorted({r[2] for r in ranges})
+    if not ks:
+        return None
+    vertical = edit["aspect"] != "16:9"
+    a = ASPECT[edit["aspect"]]
+    labels = "[m]" + "".join(f"[r{k}_{j}]" for k in ks for j in range(k))
+    parts = [f"[0:v]fps={F},split={1 + sum(ks)}{labels}", f"[m]{_crop(keyframes, start, dur, src_w, src_h, a)},scale={W}:{H},setsar=1[c0]"]
+    cur = "c0"
+    for k in ks:
+        rw, rh = (W, H // k // 2 * 2) if vertical else (W // k // 2 * 2, H)
+        ra = rw / rh
+        sc = row_scale(rows.get("faceH"), src_w, src_h, ra)
+        for j in range(k):
+            parts.append(f"[r{k}_{j}]{_crop(rows['tracks'][str(k)][j], start, dur, src_w, src_h, ra, sc)},scale={rw}:{rh},setsar=1[p{k}_{j}]")
+        stack = "vstack" if vertical else "hstack"
+        parts.append("".join(f"[p{k}_{j}]" for j in range(k)) + f"{stack}=inputs={k},pad={W}:{H},setsar=1[s{k}]")
+        en = "+".join(f"between(t,{_fmt(r[0])},{_fmt(r[1])})" for r in ranges if r[2] == k)
+        parts.append(f"[{cur}][s{k}]overlay=0:0:enable='{en}'[o{k}]")
+        cur = f"o{k}"
+        for j in range(k):  # Grid: an accent outline on whoever is talking
+            act = [r for r in in_clip(rows.get("active", []), start, dur) if r[2] == k and r[3] == j]
+            if act:
+                x, y = (0, j * rh) if vertical else (j * rw, 0)
+                en = "+".join(f"between(t,{_fmt(r[0])},{_fmt(r[1])})" for r in act)
+                parts.append(f"[{cur}]drawbox=x={x}:y={y}:w={rw}:h={rh}:color=0xF26B5B:t={max(4, W // 135)}:enable='{en}'[h{k}_{j}]")
+                cur = f"h{k}_{j}"
+    parts[-1] = parts[-1][: parts[-1].rindex("[")] + "[v0]"
+    return ";".join(parts)
+
+
 def build_command(src: Path, out_name: str, edit: dict, keyframes, src_w: int, src_h: int, start: float, end: float,
                   logo: Path | None, ass_name: str, encoder: str, keep=None, zooms=(), fps: float = 30.0, has_audio: bool = True,
-                  bumpers=()) -> list[str]:
+                  bumpers=(), rows: dict | None = None) -> list[str]:
     """Run with cwd = the renders folder: ass_name and '.fonts' are relative there, so no path needs filtergraph escaping.
     keep / zooms: clip-relative seconds (the cut list and punch-ins the editor saved). bumpers: [(path, has_audio, duration)]
     for the intro and outro, in order around the clip. Crop and zoom run on the uncut clock; the cuts come after them."""
     W, H = output_size(edit["aspect"], edit["resolution"])
     dur = end - start
     F = _fmt(fps)
-    if edit["layoutId"] == "wide-blur":
+    video = _rows(F, W, H, edit, keyframes, rows, start, dur, src_w, src_h) if rows and edit["layoutId"] in ("split", "grid") else None
+    if not video and edit["layoutId"] == "wide-blur":
         video = (f"[0:v]fps={F},split[a][b];[a]scale={W}:{H}:force_original_aspect_ratio=increase,crop={W}:{H},boxblur=20:2,eq=brightness=-0.12[bg];"
                  f"[b]scale={W}:{H}:force_original_aspect_ratio=decrease[fg];[bg][fg]overlay=(W-w)/2:(H-h)/2,setsar=1[v0]")
-    else:
+    elif not video:  # single, active speaker (its own crop path), or split/grid with nobody else on screen in this clip
         a = ASPECT[edit["aspect"]]
-        _, _, cw, ch = crop_rect(0.5, 0.5, src_w, src_h, a)
-        x, y = crop_x_expr(keyframes, start, dur, src_w, src_h, a, 0), crop_x_expr(keyframes, start, dur, src_w, src_h, a, 1)
         zoom = (f",zoompan=z='{zoom_expr(zooms)}':x='iw/2-iw/zoom/2':y='ih/2-ih/zoom/2':d=1:s={W}x{H}:fps={F},setsar=1" if zooms else "")
-        video = f"[0:v]fps={F},crop=w={cw}:h={ch}:x='{x}':y='{y}',scale={W}:{H},setsar=1{zoom}[v0]"
+        video = f"[0:v]fps={F},{_crop(keyframes, start, dur, src_w, src_h, a)},scale={W}:{H},setsar=1{zoom}[v0]"
     parts = [video]
     # Cuts: one trim per kept part, joined. Cut points sit on the frame grid so sound and picture stay the same length.
     snap = lambda t: _fmt(round(t * fps) / fps)  # noqa: E731

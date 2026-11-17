@@ -109,3 +109,8 @@ def test_face_detection_failure_never_fails_the_job(conn, data_dir, clips, monke
     monkeypatch.setattr(F, "_model", offline)
     F.run(ctx_for(conn))  # no exception: the crop just stays centred
     assert not (md / "track.json").exists()  # not cached, so a later run retries
+
+
+def test_crop_rect_scale_matches_the_editor():  # web/tests/reframe.test.ts
+    assert crop_rect(0.3, 0.4, 1920, 1080, 9 / 8, 0.5) == (272, 162, 606, 540)
+    assert crop_rect(0.95, 0.5, 1920, 1080, 9 / 8, 0.45) == (1374, 296, 546, 486)

@@ -232,3 +232,32 @@ def test_intro_and_outro_wrap_the_clip(conn, data_dir, clips):
     off = add_clip(conn, pid, edit(brand=brand, bumpers=False))
     assert render(conn, pid, [off])["status"] == "done"
     assert abs(_durations(data_dir / "renders" / f"{off}-1080p.mp4")[0] - 4.0) < 0.15
+
+
+def _people(md):
+    rows2 = [[[0, 0.3, 0.4]], [[0, 0.7, 0.4]]]
+    plan = {"track": [[0, 0.3, 0.4], [3, 0.3, 0.4], [3.001, 0.7, 0.4]], "faceH": 0.2, "multi": True, "speakers": [0, 1], "segments": [],
+            "split": {"ranges": [[1, 3.5, 2]], "tracks": {"2": rows2}},
+            "grid": {"ranges": [[1, 3.5, 2]], "tracks": {"2": rows2}, "active": [[1, 2, 2, 0], [2, 3.5, 2, 1]]}}
+    (md / "people.json").write_text(json.dumps(plan))
+
+
+def test_speaker_layouts_render_from_the_speaker_plan(conn, data_dir, clips):
+    pid = project(conn, data_dir, clips)
+    _people(data_dir / "media" / pid)
+    ids = [add_clip(conn, pid, edit(layoutId=l)) for l in ("active-speaker", "split", "grid")] + [add_clip(conn, pid, edit(layoutId="split", aspect="16:9"))]
+    job = render(conn, pid, ids)
+    assert job["status"] == "done", job["error"]
+    for cid in ids[:3]:
+        out = data_dir / "renders" / f"{cid}-1080p.mp4"
+        assert size_of(out) == (1080, 1920) and abs(float(probe(out)["format"]["duration"]) - 4.0) < 0.15
+    assert size_of(data_dir / "renders" / f"{ids[3]}-1080p.mp4") == (1920, 1080)
+
+
+def test_split_rows_crop_each_person_and_subtitles_move_to_the_divider(tmp_path):
+    from clipforge_worker.render.graph import build_command
+    rows = {"ranges": [[10, 20, 2], [30, 40, 2]], "tracks": {"2": [[[0, 0.3, 0.4]], [[0, 0.7, 0.4]]]}, "faceH": 0.2}
+    cmd = build_command(Path("s.mp4"), "o.mp4", edit(layoutId="split"), [[0, 0.5, 0.5]], 1920, 1080, 12, 25, None, "a.ass", "libx264", rows=rows)
+    g = cmd[cmd.index("-filter_complex") + 1]
+    assert "vstack=inputs=2" in g and "enable='between(t,0,8)'" in g  # only the part of the range inside the clip, clip-relative
+    assert g.count("crop=w=776:h=690") == 2  # a tight row crop per person (3.2 face heights), not the full-height 9:8

@@ -24,3 +24,8 @@ test('outputSize per aspect and resolution', () => {
   expect(outputSize('16:9', '1080p')).toEqual({ w: 1920, h: 1080 })
   expect(outputSize('16:9', '720p')).toEqual({ w: 1280, h: 720 })
 })
+
+test('cropRect scale: a tighter crop for one person of several (same numbers as clips/reframe.py)', () => {
+  expect(cropRect(0.3, 0.4, 1920, 1080, 9 / 8, 0.5)).toEqual([272, 162, 606, 540])
+  expect(cropRect(0.95, 0.5, 1920, 1080, 9 / 8, 0.45)).toEqual([1374, 296, 546, 486])
+})

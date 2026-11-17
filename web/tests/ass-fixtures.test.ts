@@ -4,7 +4,7 @@ import { mkdirSync, writeFileSync } from 'node:fs'
 import { test } from 'vitest'
 import { join } from 'node:path'
 import { buildAss, type AssInput } from '@/lib/ass'
-import { keepRanges, retimeWords, zoomAt, zoomRanges, type Range } from '@/lib/cuts'
+import { keepRanges, middleRanges, retimeWords, zoomAt, zoomRanges, type Range } from '@/lib/cuts'
 import { builtinPresets } from '@/lib/subtitle-presets'
 
 const OUT = join(__dirname, '..', '..', 'shared', 'ass-fixtures')
@@ -19,6 +19,7 @@ const cases: Record<string, AssInput> = {
   'watermark-text': { style: builtinPresets[2], words: sample, width: 1920, height: 1080, duration: 6.5,
     watermarkText: { value: '@clipforge', font: 'Geist', color: '#FFFFFF', opacity: 56, position: 'tl', marginPct: 3, sizePct: 15 } },
   'hook': { style: builtinPresets[0], words: sample, width: 1080, height: 1920, duration: 6, hook: { text: 'She did NOT expect {this}', end: 3 } },
+  'split-middle': { style: { ...builtinPresets[0], animation: 'slide' }, words: sample, width: 1080, height: 1920, duration: 6, middle: [[0.5, 1.6, 50], [3, 9, 66.67]] },
   'hook-top-hindi': { style: { ...boxed, position: 'top' }, words: hindi, width: 1920, height: 1080, duration: 2.5, hook: { text: 'यह देखो', end: 3 } },
 }
 
@@ -28,6 +29,7 @@ const silences: Range[] = [[9, 10.02], [13.5, 14.95], [16.2, 16.5]]
 const keep = keepRanges({ start: 9.5, end: 17.5 }, talk, silences, { fillers: true, pauses: true })
 const zooms = zoomRanges(talk, keep, ['blind dates'])
 export const cutsFixture = { words: talk, keep, retimed: retimeWords(talk, keep), zooms,
+  middle: middleRanges([[9, 12, 2], [13.2, 14.9, 3], [16, 30, 2]], keep, true),
   zoomSamples: [10, 14.9, 15, 15.06, 15.2, 15.75, 15.85, 16].map((t) => [t, zoomAt(zooms, t)]) }
 test.runIf(process.env.ASS_FIXTURES === 'write')('write ASS fixtures', () => {
 mkdirSync(OUT, { recursive: true })

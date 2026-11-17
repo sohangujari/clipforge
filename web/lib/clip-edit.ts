@@ -5,11 +5,12 @@ import { BrandKitObject } from './brand-kit'
 import { SubtitleStyleSchema } from './subtitle-presets'
 import { keepRanges, zoomRanges, type Range as Span } from './cuts'
 
+const RENDERABLE = ['single', 'wide-blur', 'active-speaker', 'split', 'grid'] as const
 const Range = z.tuple([z.number(), z.number()])
 
 export const ClipEditSchema = z.object({
   aspect: z.enum(['9:16', '1:1', '16:9']),
-  layoutId: z.enum(['single', 'wide-blur']), // the rest need speaker/facecam detection (Phases 6–7)
+  layoutId: z.enum(RENDERABLE), // facecam layouts: Phase 7
   style: SubtitleStyleSchema,
   subtitlesOn: z.boolean(),
   watermarkOn: z.boolean(),
@@ -39,7 +40,7 @@ export function derive(s: Pick<EditorState, 'trim' | 'words' | 'removeFillers' |
 
 /** The part of the editor state that is saved with the clip and used by the export. */
 export const toEdit = (s: EditorState, settingsBrand: EditorState['brand'] | undefined, m: ClipMedia): ClipEdit => ({
-  aspect: s.aspect, layoutId: s.layoutId === 'wide-blur' ? 'wide-blur' : 'single',
+  aspect: s.aspect, layoutId: (RENDERABLE as readonly string[]).includes(s.layoutId) ? s.layoutId as ClipEdit['layoutId'] : 'single',
   style: s.style, subtitlesOn: s.subtitlesOn, watermarkOn: s.watermarkOn, trim: s.trim, resolution: s.resolution,
   removeFillers: s.removeFillers, removePauses: s.removePauses, autoZoom: s.autoZoom, hook: s.hook, bumpers: s.bumpers, ...derive(s, m),
   ...(JSON.stringify(s.brand) !== JSON.stringify(settingsBrand) && { brand: s.brand }) })

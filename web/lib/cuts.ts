@@ -86,3 +86,10 @@ export function zoomAt(zooms: Range[], t: number): number {
   for (const [a, b] of zooms) z += Math.min(1, Math.max(0, (t - a) / ZOOM_IN)) * Math.min(1, Math.max(0, (b - t) / ZOOM_OUT))
   return 1 + (ZOOM - 1) * z
 }
+
+/** Where subtitles move to the divider: split/grid ranges (source [start, end, rows]) on the cut clip's clock. Rows stack
+ * only at 9:16 and 1:1 (16:9 uses columns: subtitles stay put). 2 rows → the middle; 3 → between the 2nd and 3rd. */
+export function middleRanges(ranges: [number, number, number][], keep: Range[], vertical: boolean): [number, number, number][] {
+  if (!vertical) return []
+  return ranges.map(([a, b, k]): [number, number, number] => [r3(toOut(keep, a)), r3(toOut(keep, b)), k === 2 ? 50 : 66.67]).filter(([a, b]) => b > a)
+}

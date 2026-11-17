@@ -44,3 +44,11 @@ def zoom_expr(zooms, var: str = "it") -> str:
     f = lambda n: f"{n:.3f}".rstrip("0").rstrip(".")  # noqa: E731
     terms = "+".join(f"clip(({var}-{f(a)})/{ZOOM_IN},0,1)*clip(({f(b)}-{var})/{ZOOM_OUT},0,1)" for a, b in zooms)
     return f"1+{f(ZOOM - 1)}*({terms})" if terms else "1"
+
+
+def middle_ranges(ranges, keep, vertical: bool) -> list:
+    """web/lib/cuts.ts middleRanges: where subtitles sit on the split/grid divider, on the cut clip's clock."""
+    if not vertical:
+        return []
+    out = [[_r3(to_out(keep, a)), _r3(to_out(keep, b)), 50 if k == 2 else 66.67] for a, b, k, *_ in ranges]
+    return [r for r in out if r[1] > r[0]]

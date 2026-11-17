@@ -4,6 +4,7 @@ import { getDb } from './db'
 import { PROVIDER_KINDS } from './ai/types'
 import { SubtitleStyleSchema } from './subtitle-presets'
 import { BrandKitSchema } from './brand-kit'
+import { LayoutTemplates } from './layout-templates'
 import { CONTENT_TYPES, TONES } from './constants'
 
 /** Names and brand words fed to Whisper's prompt. Trimmed, empties dropped, ≤ 50 × 40 chars. */
@@ -31,6 +32,7 @@ export const schemas = {
   }).default({ clipCount: 'auto', lengthRange: [30, 90], language: 'auto', tone: 'neutral', contentType: 'auto', whisperModel: 'large-v3-turbo', vocabulary: [], captionScript: 'native' }),
   /** Requests per provider:model for the current Pacific-time day (free tiers reset at midnight Pacific). */
   llmUsage: z.object({ date: z.string().default(''), counts: z.record(z.string(), z.number()).default({}) }).default({ date: '', counts: {} }),
+  layoutTemplates: LayoutTemplates,
   profile: z.object({ name: z.string().max(80).default(''), handle: z.string().max(40).default('') }).default({ name: '', handle: '' }),
 }
 

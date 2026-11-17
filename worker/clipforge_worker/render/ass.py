@@ -114,7 +114,9 @@ def build_ass(i: dict) -> str:
         chunk, nxt = words[c:c + per], (words[c + per] if c + per < len(words) else None)
         last = chunk[-1]
         hold = nxt["s"] if nxt and nxt["s"] - last["e"] < 0.5 else last["e"]
-        pos = f"\\pos({x},{y})"
+        m = next((r for r in i.get("middle") or [] if r[0] <= chunk[0]["s"] < r[1]), None)
+        cy = _round(H * m[2] / 100) if m else y
+        pos = f"\\pos({x},{cy})"
         if anim in ("fade", "none"):
             ev(chunk[0]["s"], hold, pos + fx + ("\\fad(120,120)" if anim == "fade" else ""), join([w["w"] for w in chunk]))
             continue
@@ -129,7 +131,7 @@ def build_ass(i: dict) -> str:
                     parts.append(f"{{\\1c{active}\\t(0,80,\\fscx118\\fscy118)\\t(80,160,\\fscx108\\fscy108)}}{sw['w']}{{\\1c{primary}\\fscx100\\fscy100}}")
                 else:
                     parts.append(f"{{\\1c{active}}}{sw['w']}{{\\1c{primary}}}")
-            at = f"\\move({x},{y + _round(H * 0.02)},{x},{y},0,150)" if anim == "slide" and k == 0 else pos
+            at = f"\\move({x},{cy + _round(H * 0.02)},{x},{cy},0,150)" if anim == "slide" and k == 0 else pos
             ev(w["s"], end, at + fx, join(parts))
     if wm and wm.get("value"):
         events.append(f"Dialogue: 1,{time(0)},{time(i['duration'])},Watermark,,0,0,0,,{_clean(wm['value'], 'none')}")

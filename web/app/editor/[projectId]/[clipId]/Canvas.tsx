@@ -3,7 +3,10 @@ import { useMemo, type RefObject } from 'react'
 import { AssOverlay } from '@/components/cf/AssOverlay'
 import { ClipVideo, type RealLayout } from '@/components/cf/ClipVideo'
 import { buildAss } from '@/lib/ass'
-import { keptDuration, retimeWords, type Range } from '@/lib/cuts'
+import { keptDuration, middleRanges, retimeWords, type Range } from '@/lib/cuts'
+import type { People } from '@/lib/people'
+
+const NO_ZOOM: Range[] = []
 import { outputSize, type Keyframe } from '@/lib/reframe'
 import { ASPECT_RATIO, chunkAt, type EditorState, type SafeZone } from '@/lib/editor'
 import { LAYOUTS, type ThumbRect } from '@/lib/layouts'
@@ -35,12 +38,17 @@ function Region({ r, thumbnail }: { r: ThumbRect; thumbnail: string }) {
   )
 }
 
-export interface RealMedia { src: string; track: Keyframe[]; playing: boolean; onTime: (t: number) => void; videoRef: RefObject<HTMLVideoElement | null>; keep: Range[]; zooms: Range[] }
+export interface RealMedia { src: string; track: Keyframe[]; playing: boolean; onTime: (t: number) => void; videoRef: RefObject<HTMLVideoElement | null>; keep: Range[]; zooms: Range[]; people: People | null }
 
 export const HOOK_S = 3 // the hook line shows over the first seconds (worker/clipforge_worker/stages/render.py)
 
 /** The ASS for the editor state on the cut clip's clock: same input the export builds (worker render job). */
-export function assFor(state: EditorState, keep: Range[]): string {
+/** The speaker plan's rows for a split/grid clip (null for other layouts, or before speakers were found). */
+export function rowsFor(state: EditorState, people: People | null) {
+  return people && (state.layoutId === 'split' || state.layoutId === 'grid') ? { plan: people[state.layoutId], faceH: people.faceH } : null
+}
+
+export function assFor(state: EditorState, keep: Range[], people: People | null = null): string {
   const { start, end } = state.trim
   const b = state.brand
   const text = state.watermarkOn && !b.logoPath && b.text?.value
@@ -49,6 +57,7 @@ export function assFor(state: EditorState, keep: Range[]): string {
     style: state.style, width, height, duration: keptDuration(keep),
     words: state.subtitlesOn ? retimeWords(state.words.filter((w) => w.s >= start - 0.05 && w.e <= end + 0.05), keep) : [],
     hook: state.hook.on && state.hook.text ? { text: state.hook.text, end: HOOK_S } : null,
+    middle: middleRanges((rowsFor(state, people)?.plan.ranges ?? []).filter(([a, b]) => b > start && a < end), keep, state.aspect !== '16:9'),
     watermarkText: text ? { value: b.text!.value, font: b.text!.font, color: b.text!.color, opacity: (b.opacity * b.text!.opacity) / 100, position: b.position, marginPct: b.marginPct, sizePct: b.sizePct } : null,
   })
 }
@@ -60,13 +69,16 @@ export function CanvasFrame({ state, t, thumbnail, className, testIds = true, re
   const chunk = chunkAt(state.words, state.style.wordsPerLine * state.style.lines, t)
   const b = state.brand
   const logoSrc = b.logoPath ? `/api/files/${b.logoPath}` : null
-  const ass = useMemo(() => (real ? assFor(state, real.keep) : ''), [real, state])
+  const ass = useMemo(() => (real ? assFor(state, real.keep, real.people) : ''), [real, state])
+  const speakerLayout = real?.people && ['active-speaker', 'split', 'grid'].includes(state.layoutId)
+  const zoomable = state.layoutId === 'single' || state.layoutId === 'active-speaker'
   return (
     <div data-testid={testIds ? 'canvas-frame' : undefined} className={cn('relative overflow-hidden rounded-xl bg-black shadow-cf [container-type:inline-size]', className)}
       style={{ aspectRatio: ASPECT_RATIO[state.aspect] }}>
       {real ? (
         <>
-          <ClipVideo src={real.src} track={real.track} aspect={state.aspect} layout={state.layoutId as RealLayout} keep={real.keep} zooms={real.zooms}
+          <ClipVideo src={real.src} track={speakerLayout ? real.people!.track : real.track} aspect={state.aspect} layout={state.layoutId as RealLayout}
+            keep={real.keep} zooms={zoomable ? real.zooms : NO_ZOOM} rows={rowsFor(state, real.people)}
             t={t} playing={real.playing} onTime={real.onTime} videoRef={real.videoRef} />
           <AssOverlay ass={ass} videoRef={real.videoRef} keep={real.keep} />
         </>

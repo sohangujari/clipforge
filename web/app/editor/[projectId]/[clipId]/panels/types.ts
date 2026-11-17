@@ -1,5 +1,6 @@
 import type { EditorState } from '@/lib/editor'
 import type { MockClip, MockProject } from '@/lib/mock'
+import type { People } from '@/lib/people'
 
 export interface PanelProps {
   state: EditorState
@@ -12,4 +13,6 @@ export interface PanelProps {
   real?: boolean
   /** Saves the current edit now (before an export, so it renders exactly what the preview shows). */
   saveEdit?: () => Promise<void>
+  /** Speakers found in the video (null: none yet, or not a real clip). */
+  people?: People | null
 }

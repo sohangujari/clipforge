@@ -10,7 +10,7 @@ const TYPES: Record<string, string> = {
   '.json': 'application/json', '.zip': 'application/zip', '.ttf': 'font/ttf', '.otf': 'font/otf', '.woff': 'font/woff', '.woff2': 'font/woff2',
 }
 // media/ also holds source videos, audio and transcripts — only these are served:
-const MEDIA_ALLOWED = [/^[0-9a-f-]{36}\/(thumb\.jpg|proxy\.mp4|track\.json)$/, /^[0-9a-f-]{36}\/clips\/[0-9a-f-]{36}\.jpg$/]
+const MEDIA_ALLOWED = [/^[0-9a-f-]{36}\/(thumb\.jpg|proxy\.mp4|track\.json|people\.json)$/, /^[0-9a-f-]{36}\/clips\/[0-9a-f-]{36}\.jpg$/]
 // renders/ holds exports (and FFmpeg's working files) — only finished MP4s and ZIPs are served:
 const RENDERS_ALLOWED = [/^[0-9a-f-]{36}-(1080p|720p)\.mp4$/, /^[0-9a-f-]{36}-clips\.zip$/]
 const MAX_RANGE = 1024 * 1024 // small pieces: hover previews get cancelled a lot; browsers fetch the next range as needed

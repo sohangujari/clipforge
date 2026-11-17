@@ -14,6 +14,9 @@ from ..media import probe
 
 log = logging.getLogger("clipforge.worker")
 FPS = 2
+# The single-face crop needs sure faces (test patterns gave false ones at 0.50–0.56); small faces in wide two-person
+# shots score 0.5–0.65, so the all-faces list (speaker layouts) takes them, and people.py keeps only faces that persist.
+TRACK_MIN, ALL_MIN = 0.65, 0.5
 WIDTH = 320  # detection size: plenty for faces in a podcast frame, cheap to decode
 MODEL_URL = "https://storage.googleapis.com/mediapipe-models/face_detector/blaze_face_short_range/float16/1/blaze_face_short_range.tflite"
 
@@ -82,14 +85,17 @@ def _detect(ctx) -> None:
     w, h = WIDTH, max(2, round(WIDTH * v["height"] / v["width"] / 2) * 2)
     total = max(1, int(float(ctx.project.get("durationSec") or 0) * FPS))
     detector = vision.FaceDetector.create_from_options(vision.FaceDetectorOptions(
-        base_options=BaseOptions(model_asset_path=_model(ctx.data_dir)), min_detection_confidence=0.65))  # test patterns gave false faces at 0.50–0.56
+        base_options=BaseOptions(model_asset_path=_model(ctx.data_dir)), min_detection_confidence=ALL_MIN))
     proc = subprocess.Popen(["ffmpeg", "-v", "error", "-i", str(proxy), "-vf", f"fps={FPS},scale={w}:{h}", "-f", "rawvideo", "-pix_fmt", "rgb24", "pipe:1"],
                             stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
-    frames, size = [], w * h * 3
+    frames, every, size = [], [], w * h * 3  # every: all faces per frame (speaker layouts need more than the biggest)
     try:
         while (buf := proc.stdout.read(size)) and len(buf) == size:
             img = mp.Image(image_format=mp.ImageFormat.SRGB, data=np.frombuffer(buf, np.uint8).reshape(h, w, 3))
-            dets = detector.detect(img).detections
+            found = detector.detect(img).detections
+            dets = [d for d in found if d.categories[0].score >= TRACK_MIN]
+            every.append([[round((d.bounding_box.origin_x + d.bounding_box.width / 2) / w, 4), round((d.bounding_box.origin_y + d.bounding_box.height / 2) / h, 4),
+                           round(d.bounding_box.width / w, 4), round(d.bounding_box.height / h, 4)] for d in found[:6]])
             if dets:
                 b = max(dets, key=lambda d: d.bounding_box.width * d.bounding_box.height).bounding_box
                 frames.append([round((b.origin_x + b.width / 2) / w, 4), round((b.origin_y + b.height / 2) / h, 4),
@@ -104,6 +110,6 @@ def _detect(ctx) -> None:
         detector.close()
     ctx.report(0.99, "Finding camera cuts")
     cuts = find_cuts(proxy)
-    _write(md / "faces.json", {"fps": FPS, "w": v["width"], "h": v["height"], "frames": frames, "cuts": cuts})
+    _write(md / "faces.json", {"fps": FPS, "w": v["width"], "h": v["height"], "frames": frames, "all": every, "cuts": cuts})
     _write(md / "track.json", {"keyframes": smooth_track(frames, FPS, cuts)})
     ctx.report(1.0)

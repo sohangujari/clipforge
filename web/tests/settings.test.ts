@@ -94,3 +94,16 @@ test('intro/outro upload takes real videos only and they are served back; brand 
   await setSetting('brandKit', { ...(await getSetting('brandKit')), introPath: path })
   await expect(setSetting('brandKit', { ...(await getSetting('brandKit')), outroPath: '../clipforge.db' })).rejects.toThrow()
 })
+
+test('layout templates are saved, validated and applied', async () => {
+  const { getSetting, setSetting } = await import('@/lib/settings')
+  expect(await getSetting('layoutTemplates')).toEqual([])
+  const t = { id: 'a', name: 'Podcast 2-cam', layoutId: 'split', aspect: '9:16', subtitles: { position: 'middle', offsetPct: 0 }, watermark: 'tr' }
+  await setSetting('layoutTemplates', [t])
+  expect(await getSetting('layoutTemplates')).toEqual([t])
+  await expect(setSetting('layoutTemplates', [{ ...t, name: ' ' }])).rejects.toThrow()
+  const { applyTemplate } = await import('@/lib/layout-templates')
+  const { builtinPresets } = await import('@/lib/subtitle-presets')
+  const s = { style: builtinPresets[0], brand: { position: 'br', opacity: 80, sizePct: 12, marginPct: 4 } } as never
+  expect(applyTemplate(s, t as never)).toMatchObject({ layoutId: 'split', aspect: '9:16', style: { position: 'middle', id: builtinPresets[0].id }, brand: { position: 'tr', opacity: 80 } })
+})

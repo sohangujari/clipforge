@@ -11,7 +11,9 @@ type Position = (typeof POSITIONS)[number]
 export interface AssWord { w: string; s: number; e: number }
 export interface AssWatermark { value: string; font: string; color: string; opacity: number; position: Position; marginPct: number; sizePct: number }
 export interface AssHook { text: string; end: number }
-export interface AssInput { style: SubtitleStyle; words: AssWord[]; width: number; height: number; duration: number; watermarkText?: AssWatermark | null; hook?: AssHook | null }
+export interface AssInput { style: SubtitleStyle; words: AssWord[]; width: number; height: number; duration: number; watermarkText?: AssWatermark | null; hook?: AssHook | null
+  /** [start, end, y%]: while split/grid rows are on screen, subtitles sit on the divider between them */
+  middle?: [number, number, number][] }
 
 export const FALLBACK_FONT = 'Noto Sans Devanagari'
 /** Every bundled font file. The preview preloads them all into libass (~1 MB), as FFmpeg's fontsdir does for the export, so both
@@ -93,7 +95,9 @@ export function buildAss(i: AssInput): string {
     const chunk = words.slice(c, c + per), next = words[c + per]
     const last = chunk[chunk.length - 1]
     const hold = next && next.s - last.e < 0.5 ? next.s : last.e
-    const pos = `\\pos(${x},${y})`
+    const m = i.middle?.find(([a, b]) => chunk[0].s >= a && chunk[0].s < b)
+    const cy = m ? round((H * m[2]) / 100) : y
+    const pos = `\\pos(${x},${cy})`
     if (st.animation === 'fade' || st.animation === 'none') {
       ev(chunk[0].s, hold, pos + fx + (st.animation === 'fade' ? '\\fad(120,120)' : ''), join(chunk.map((w) => w.w)))
       continue
@@ -104,7 +108,7 @@ export function buildAss(i: AssInput): string {
       const text = join(shown.map((sw, j) => j !== k ? sw.w
         : st.animation === 'pop' ? `{\\1c${active}\\t(0,80,\\fscx118\\fscy118)\\t(80,160,\\fscx108\\fscy108)}${sw.w}{\\1c${primary}\\fscx100\\fscy100}`
           : `{\\1c${active}}${sw.w}{\\1c${primary}}`))
-      const at = st.animation === 'slide' && k === 0 ? `\\move(${x},${y + round(H * 0.02)},${x},${y},0,150)` : pos
+      const at = st.animation === 'slide' && k === 0 ? `\\move(${x},${cy + round(H * 0.02)},${x},${cy},0,150)` : pos
       ev(w.s, end, at + fx, text)
     })
   }

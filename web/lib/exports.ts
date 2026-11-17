@@ -3,7 +3,8 @@ import { randomUUID } from 'node:crypto'
 import { z } from 'zod'
 import { getDb } from './db'
 import { derive, type ClipEdit } from './clip-edit'
-import { readSilences, readWords } from './clip-views'
+import { readPeople, readSilences, readWords } from './clip-views'
+import { defaultLayout } from './people'
 import { getSetting } from './settings'
 import { builtinPresets } from './subtitle-presets'
 import { ProjectError } from './projects'
@@ -20,7 +21,7 @@ async function defaultEdit(clip: ClipRow, resolution: ClipEdit['resolution']): P
   const trim = { start: clip.startSec, end: clip.endSec }
   const words = readWords(clip.projectId).filter((w) => w.s >= trim.start - 0.05 && w.e <= trim.end + 0.05)
   const on = { removeFillers: true, removePauses: true, autoZoom: true }
-  return { aspect: '9:16', layoutId: 'single', style, subtitlesOn: true, watermarkOn: true, brand, trim, resolution, ...on, bumpers: true,
+  return { aspect: '9:16', layoutId: defaultLayout(readPeople(clip.projectId)), style, subtitlesOn: true, watermarkOn: true, brand, trim, resolution, ...on, bumpers: true,
     hook: { on: true, text: clip.hook ?? JSON.parse(clip.titles)[0] ?? '' },
     ...derive({ trim, words, ...on }, { silences: readSilences(clip.projectId), keywords: clip.keywords ? JSON.parse(clip.keywords) : [] }) }
 }

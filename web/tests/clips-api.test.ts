@@ -106,7 +106,7 @@ test('invalid edits are rejected', async () => {
   const { ids } = await projectWithClips()
   const edit = await validEdit()
   expect((await patch(ids[0], { edit: { ...edit, trim: { start: 20, end: 20 } } })).status).toBe(400)
-  expect((await patch(ids[0], { edit: { ...edit, layoutId: 'grid' } })).status).toBe(400) // needs speaker detection (Phase 6)
+  expect((await patch(ids[0], { edit: { ...edit, layoutId: 'pip' } })).status).toBe(400) // needs facecam detection (Phase 7)
   expect((await patch(ids[0], { status: 'nope' })).status).toBe(400)
 })
 
@@ -234,4 +234,15 @@ test('the clip view carries the AI hook and keywords', async () => {
   const { getClip } = await import('@/lib/clip-views')
   expect(await getClip(ids[0])).toMatchObject({ hook: 'H', keywords: ['a', 'b'] })
   expect((await getClip(ids[1]))!.keywords).toEqual([])
+})
+
+test('speaker layouts can be saved; a video with two people talking exports in Active speaker by default', async () => {
+  const { p, ids } = await projectWithClips()
+  for (const layoutId of ['active-speaker', 'split', 'grid']) expect((await patch(ids[0], { edit: { ...(await validEdit()), layoutId } })).status).toBe(200)
+  const people = { track: [[0, 0.5, 0.5]], faceH: 0.2, multi: true, speakers: [0, 1], split: { ranges: [], tracks: {} }, grid: { ranges: [], tracks: {} } }
+  writeFileSync(join(dir, 'media', p.id, 'people.json'), JSON.stringify(people))
+  const { jobId } = await (await post('@/app/api/clips/[id]/export/route', ids[1], { resolution: '1080p' })).json()
+  expect(JSON.parse((await (await db()).job.findUniqueOrThrow({ where: { id: jobId } })).payload!).edits[ids[1]].layoutId).toBe('active-speaker')
+  const { GET } = await import('@/app/api/files/[...path]/route')
+  expect((await GET(new Request('http://x'), ctx({ path: ['media', p.id, 'people.json'] }))).status).toBe(200)
 })

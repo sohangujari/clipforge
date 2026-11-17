@@ -2,7 +2,7 @@
 
 Local-first AI video clipping. ClipForge turns long videos into short vertical clips with animated subtitles, your branding, a viral score, and AI-written titles. It runs entirely on your own device: there's no account and no cloud, and you bring your own AI keys or use a free local model through Ollama.
 
-> **Status: Phase 4 of 8.** Paste a link or upload a file, and ClipForge transcribes it on your device, **finds clips** and **exports them as vertical videos**: a face-tracked crop that follows camera cuts, animated subtitles in 10 styles, your logo or @handle, MP4 at 1080p or 720p, or every clip as a ZIP. The editor preview uses the same subtitle engine (libass) and fonts as the export, so what you see is what you get. Clips come out tight by default: **filler words and long pauses are cut**, the camera **punches in on key words**, an **AI-written hook line** opens each clip, and your **intro/outro** can wrap every export.
+> **Status: Phase 6 of 8** (Phase 5, the full editor, comes next). Paste a link or upload a file, and ClipForge transcribes it on your device, **finds clips** and **exports them as vertical videos**: a face-tracked crop that follows camera cuts, animated subtitles in 10 styles, your logo or @handle, MP4 at 1080p or 720p, or every clip as a ZIP. The editor preview uses the same subtitle engine (libass) and fonts as the export, so what you see is what you get. Clips come out tight by default: **filler words and long pauses are cut**, the camera **punches in on key words**, an **AI-written hook line** opens each clip, and your **intro/outro** can wrap every export. For podcasts, ClipForge **tells the voices apart** and offers **Active speaker**, **Split screen** and **Grid** layouts.
 
 ## Requirements
 
@@ -70,7 +70,9 @@ Videos transcribed before an AI model was set get a **Find clips** button on the
 
 Open a clip to edit it. The editor plays your video cropped the way it will be exported, with the subtitles drawn by **libass**, the same subtitle engine FFmpeg uses, and the same font files, so the preview matches the MP4. Your choices (aspect ratio, layout, subtitle style, watermark, trim) are saved with each clip as you go.
 
-- **Layouts:** *Single speaker* (a 9:16 crop that follows the face, holds still through small movements and jumps cleanly at camera cuts) and *Wide + blur* (the whole frame over a blurred fill). Speaker and gaming layouts arrive in Phases 6 and 7.
+- **Layouts:** *Single speaker* (a 9:16 crop that follows the face, holds still through small movements and jumps cleanly at camera cuts) and *Wide + blur* (the whole frame over a blurred fill). Gaming layouts arrive in Phase 7.
+- **Speaker layouts (podcasts):** ClipForge works out who speaks when from the voices (no account or token needed) and which face is whose from mouth movement. *Active speaker* cuts to whoever is talking (holding each shot at least 1.5 s, so a quick "mm-hm" doesn't cut); *Split screen* stacks two people, *Grid* up to three with the talker outlined, whenever they share the screen (the rest of the clip uses the active-speaker crop), with subtitles on the divider. Clips with two people talking start in Active speaker. Speakers show as colours on the timeline. This adds about 2 minutes per 12 minutes of video (measured on an 8 GB M3, under 600 MB of memory).
+- **Layout templates:** save a clip's layout, aspect ratio, subtitle and watermark spots under a name (Layout panel) and apply it to other clips; manage them in Settings → Layouts.
 - **Export clip** (editor or clip details) renders an MP4 from the original video with the Mac's hardware encoder; **Download all (ZIP)** on the clips page renders every clip. Finished files are in `data/renders/`.
 - **Auto edits** (AI panel, all on by default): *remove filler words* (um, uh…), *remove long pauses* (pauses over 0.5 s found in the audio shrink to a breath), *auto-zoom* (a quick 12% punch-in on words the AI picked; Single speaker layout), and a *hook line* over the first 3 seconds (written by the AI with the titles; edit it freely). The preview plays the cut version; cut parts are shaded on the timeline.
 - **Intro & outro:** upload short videos in Settings → Brand kit; they're joined to every export (scaled to the clip's size) unless you switch them off for a clip in the Branding panel.
@@ -130,6 +132,7 @@ If Settings says *"Ollama isn't running"*, start it with `ollama serve`, then cl
 ## Credits
 
 - Reaction detection uses [YAMNet](https://github.com/tensorflow/models/tree/master/research/audioset/yamnet) (Apache-2.0), in the ONNX export `andrelgomes/yamnet-onnx`. The class map `worker/clipforge_worker/assets/yamnet_class_map.csv` comes from tensorflow/models (Apache-2.0).
+- Speaker detection uses [sherpa-onnx](https://github.com/k2-fsa/sherpa-onnx) (Apache-2.0) with the pyannote segmentation-3.0 model (MIT) and NVIDIA NeMo TitaNet-small (check its model card for licence terms), downloaded once to `data/models/` (~50 MB).
 - Face tracking for the vertical crop uses [MediaPipe](https://github.com/google-ai-edge/mediapipe) (Apache-2.0) with its BlazeFace short-range model, downloaded once to `data/models/`.
 - Subtitle fonts (Montserrat, Anton, Inter, Poppins, Courier Prime, Bebas Neue, Geist, Noto Sans Devanagari) are under the SIL Open Font License; see `web/public/fonts/licenses/`.
 
@@ -152,6 +155,6 @@ Code lives in `web/` (Next.js 16, App Router, Tailwind 4, shadcn/ui) and `worker
 3. ✅ Best-in-class clip finding: clean clip boundaries, laughter/applause + AI signals, plain-language clip search, a viral score you can trust that learns your taste, titles, descriptions, hashtags
 4. ✅ **4a** Export: face-tracked crops, burned-in subtitles matching the preview, watermark, MP4/ZIP · ✅ **4b** filler-word and pause removal, auto-zoom, AI hook line, intro/outro
 5. Full editor: edit by transcript, frame-precise trims, subtitle designer, layout switcher
-6. Podcast modes: speaker detection, active-speaker/split/grid layouts, layout templates
+6. ✅ Podcast modes: speaker detection, active-speaker/split/grid layouts, layout templates
 7. Gaming: facecam detection, gaming layouts, HUD safe zones, chat spikes
 8. Advanced: action-follow, game-event detection, reactions, tutorial zoom, more

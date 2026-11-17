@@ -31,3 +31,6 @@ def test_cut_retiming_and_zoom_match_the_editor():
     for t, z in f["zoomSamples"]:
         assert eval(expr.replace("clip(", "_clip("), {"_clip": lambda v, lo, hi: min(hi, max(lo, v)), "it": t}) == pytest.approx(z, abs=1e-9)
     assert zoom_expr([]) == "1"
+    from clipforge_worker.render.cuts import middle_ranges
+    assert middle_ranges([[9, 12, 2], [13.2, 14.9, 3], [16, 30, 2]], f["keep"], True) == f["middle"]
+    assert middle_ranges([[9, 12, 2]], f["keep"], False) == []

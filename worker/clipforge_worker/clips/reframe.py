@@ -73,13 +73,26 @@ def center_at(keyframes, t: float) -> tuple[float, float]:
     return keyframes[-1][1], keyframes[-1][2]
 
 
-def crop_rect(cx: float, cy: float, src_w: int, src_h: int, out_aspect: float) -> tuple[int, int, int, int]:
-    """Largest out_aspect rect inside the source, centred on (cx, cy), clamped to the frame; all values even."""
+def crop_rect(cx: float, cy: float, src_w: int, src_h: int, out_aspect: float, scale: float = 1.0) -> tuple[int, int, int, int]:
+    """Largest out_aspect rect inside the source (times scale: tighter crops for one person of several), centred on
+    (cx, cy), clamped to the frame; all values even."""
     if src_w / src_h > out_aspect:
         w, h = src_h * out_aspect, src_h
     else:
         w, h = src_w, src_w / out_aspect
+    w, h = w * scale, h * scale
     w, h = int(w) // 2 * 2, int(h) // 2 * 2
     x = min(max(math.floor(cx * src_w - w / 2 + 0.5), 0), src_w - w) // 2 * 2
     y = min(max(math.floor(cy * src_h - h / 2 + 0.5), 0), src_h - h) // 2 * 2
     return x, y, w, h
+
+
+FACE_TO_CROP = 3.2  # split/grid rows: a person's crop is this many face-heights tall
+
+
+def row_scale(face_h, src_w: int, src_h: int, aspect: float) -> float:
+    """crop_rect scale for one person's row: tight enough that the neighbour isn't in it. face_h: share of frame height."""
+    if not face_h:
+        return 1.0
+    full_h = src_h if src_w / src_h > aspect else src_w / aspect
+    return min(1.0, round(FACE_TO_CROP * face_h * src_h / full_h, 4))

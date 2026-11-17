@@ -10,13 +10,14 @@ function Toggle({ label, checked, onChange, disabled }: { label: string; checked
 }
 
 export function AiPanel({ clip, state, set, real }: PanelProps) {
+  const zoomable = state.layoutId === 'single' || state.layoutId === 'active-speaker'
   return (
     <div className="flex flex-col gap-6">
       {real && (
         <Section title="Auto edits">
           <Toggle label="Remove filler words (um, uh)" checked={state.removeFillers} onChange={(removeFillers) => set({ removeFillers })} />
           <Toggle label="Remove long pauses" checked={state.removePauses} onChange={(removePauses) => set({ removePauses })} />
-          <Toggle label="Auto-zoom on key words" checked={state.autoZoom && state.layoutId !== 'wide-blur'} disabled={state.layoutId === 'wide-blur'}
+          <Toggle label="Auto-zoom on key words" checked={state.autoZoom && zoomable} disabled={!zoomable}
             onChange={(autoZoom) => set({ autoZoom })} />
           <Toggle label="Hook line at the start" checked={state.hook.on} onChange={(on) => set({ hook: { ...state.hook, on } })} />
           {state.hook.on && (

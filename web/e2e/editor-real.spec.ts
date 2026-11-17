@@ -67,13 +67,12 @@ test('choosing a preset is saved with the clip', async ({ page }) => {
   await expect(page.getByRole('button', { name: /Boxed/ }).first()).toHaveAttribute('aria-pressed', 'true')
 })
 
-test('only layouts that work today can be picked', async ({ page }) => {
+test('only layouts that work for this video can be picked', async ({ page }) => {
   await page.goto(editorUrl)
   await page.getByRole('button', { name: 'Layout', exact: true }).click()
   await expect(page.locator('[data-layout=single]')).toBeEnabled()
   await expect(page.locator('[data-layout=wide-blur]')).toBeEnabled()
   await expect(page.locator('[data-layout=split]')).toBeDisabled()
-  await expect(page.locator('[data-layout=split]')).toContainText('Coming in Phase 6')
   await page.locator('[data-layout=wide-blur]').click()
   await expect(frame(page).getByTestId('clip-video-blur')).toBeVisible()
 })
@@ -103,4 +102,15 @@ test('auto edits: on by default, and switching them off is saved with the clip',
   await expect.poll(async () => { const e = await edit(); return [e.hook.on, e.removePauses, e.keep] })
     .toEqual([false, false, [[expect.any(Number), expect.any(Number)]]]) // nothing cut: the whole trim plays
   await expect(page.getByTestId('timeline-cut')).toHaveCount(0)
+})
+
+test('speaker layouts: offered when speakers were found; split/grid need two people on screen', async ({ page }) => {
+  await page.goto(editorUrl)
+  await page.getByRole('button', { name: 'Layout', exact: true }).click()
+  await expect(page.locator('[data-layout=active-speaker]')).toBeEnabled() // the test video: one voice, one face
+  await expect(page.locator('[data-layout=split]')).toBeDisabled()
+  await expect(page.locator('[data-layout=split]')).toContainText('Needs 2+ people on screen together')
+  await page.getByRole('textbox', { name: 'Template name' }).fill('My podcast')
+  await page.getByRole('button', { name: 'Save', exact: true }).click()
+  await expect(page.getByRole('button', { name: 'My podcast' })).toBeVisible()
 })

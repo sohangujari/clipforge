@@ -26,7 +26,7 @@ async function Editor({ params }: { params: Promise<{ projectId: string; clipId:
   const words = readWords(projectId).filter((w) => w.s >= clip.startSec - 30 && w.e <= clip.endSec + 30) // the timeline shows ±30 s
   const media = `/api/files/media/${projectId}`
   return <EditorShell project={project} clip={{ ...clip, transcript: words }} clips={clips}
-    real={{ proxyUrl: `${media}/proxy.mp4`, trackUrl: `${media}/track.json`, edit: clip.edit, keywords: clip.keywords, hook: clip.hook,
+    real={{ proxyUrl: `${media}/proxy.mp4`, trackUrl: `${media}/track.json`, peopleUrl: `${media}/people.json`, edit: clip.edit, keywords: clip.keywords, hook: clip.hook,
       silences: readSilences(projectId).filter(([a, b]) => b > clip.startSec - 30 && a < clip.endSec + 30) }} />
 }
 

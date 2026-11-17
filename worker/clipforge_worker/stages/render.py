@@ -9,9 +9,9 @@ from functools import cache
 from ..errors import UserError
 from ..media import probe
 from ..render.ass import FONTS_DIR, build_ass
-from ..render.cuts import kept_duration, retime_words
+from ..render.cuts import kept_duration, middle_ranges, retime_words
 from ..render.graph import build_command, output_size, safe_filename
-from . import faces
+from . import faces, speakers
 
 
 @cache
@@ -73,6 +73,20 @@ def _brand_kit(conn) -> dict:
     return {"position": "br", "opacity": 80, "sizePct": 12, "marginPct": 4, **(json.loads(r[0]) if r else {})}
 
 
+SPEAKER_LAYOUTS = ("active-speaker", "split", "grid")
+
+
+def _people(ctx, payload: dict, ids: list):
+    """people.json, when a clip to render uses a speaker layout (detected now for projects from before Phase 6)."""
+    rows = [ctx.conn.execute("SELECT edit FROM Clip WHERE id=?", (cid,)).fetchone() for cid in ids]
+    layouts = {json.loads(r[0])["layoutId"] for r in rows if r and r[0]} | {e["layoutId"] for e in (payload.get("edits") or {}).values()}
+    if not layouts & set(SPEAKER_LAYOUTS):
+        return None
+    speakers.run(ctx)
+    p = ctx.media_dir / "people.json"
+    return json.loads(p.read_text()) if p.exists() else None
+
+
 def run(ctx) -> None:
     payload = ctx.job.payload or {}
     ids, res = payload.get("clipIds") or [], payload.get("resolution", "1080p")
@@ -92,6 +106,7 @@ def run(ctx) -> None:
         faces.run(ctx)  # projects from before Phase 4
     track = ctx.media_dir / "track.json"
     keyframes = json.loads(track.read_text())["keyframes"] if track.exists() else [[0, 0.5, 0.5]]  # face detection failed: centre
+    people = _people(ctx, payload, ids)
     brand_kit = _brand_kit(ctx.conn)
     words = json.loads((ctx.media_dir / "transcript.json").read_text())["words"]
 
@@ -108,7 +123,10 @@ def run(ctx) -> None:
         keep = _keep(edit, start, end)
         rel = [[a - start, b - start] for a, b in keep]
         hook = edit.get("hook") or {}
-        zooms = [[a - start, b - start] for a, b in edit.get("zooms") or []] if edit["layoutId"] == "single" else []
+        layout = edit["layoutId"]
+        kf = people["track"] if people and layout in SPEAKER_LAYOUTS else keyframes  # speaker layouts follow whoever talks
+        rows = {**people[layout], "faceH": people["faceH"]} if people and layout in ("split", "grid") else None
+        zooms = [[a - start, b - start] for a, b in edit.get("zooms") or []] if layout in ("single", "active-speaker") else []
         intro, outro = _bumpers(ctx, edit)
         total = kept_duration(keep) + sum(b[2] for b in (intro, outro) if b)
         label = f"Rendering clip {n + 1} of {len(ids)}" if len(ids) > 1 else "Rendering"
@@ -117,9 +135,11 @@ def run(ctx) -> None:
         ass_name, out_name = f"{cid}.ass", f"{cid}-{res}.tmp.mp4"
         (out_dir / ass_name).write_text(build_ass({"style": edit["style"], "words": _words(edit, words, start, end, keep), "width": W, "height": H,
                                                    "duration": kept_duration(keep), "watermarkText": _watermark_text(edit),
-                                                   "hook": {"text": hook["text"], "end": 3} if hook.get("on") and hook.get("text") else None}))
-        cmd = build_command(src, out_name, edit, keyframes, info["width"], info["height"], start, end, _logo(ctx, edit), ass_name, encoder(),
-                            keep=rel, zooms=zooms, fps=info["fps"], has_audio=info["has_audio"], bumpers=(intro, outro))
+                                                   "hook": {"text": hook["text"], "end": 3} if hook.get("on") and hook.get("text") else None,
+                                                   "middle": middle_ranges([r for r in rows["ranges"] if r[1] > start and r[0] < end], keep,
+                                                                           edit["aspect"] != "16:9") if rows else None}))
+        cmd = build_command(src, out_name, edit, kf, info["width"], info["height"], start, end, _logo(ctx, edit), ass_name, encoder(),
+                            keep=rel, zooms=zooms, fps=info["fps"], has_audio=info["has_audio"], bumpers=(intro, outro), rows=rows)
         proc = subprocess.Popen(cmd, cwd=out_dir, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
         try:
             for line in proc.stdout:

@@ -8,6 +8,7 @@ import { derive, toEdit, type ClipEdit, type ClipMedia } from '@/lib/clip-edit'
 import type { Range } from '@/lib/cuts'
 import type { EditorState } from '@/lib/editor'
 import type { Keyframe } from '@/lib/reframe'
+import { defaultLayout, type People } from '@/lib/people'
 import { useAutosave } from '@/lib/use-autosave'
 import { historyReducer, initHistory } from '@/lib/history'
 import { layoutsFor } from '@/lib/layouts'
@@ -30,9 +31,9 @@ const PANELS: Record<SectionId, (p: PanelProps) => React.ReactNode> = {
   clips: ClipsPanel, layout: LayoutPanel, subtitles: SubtitlesPanel, branding: BrandingPanel, ai: AiPanel, export: ExportPanel, settings: SettingsPanel,
 }
 
-export interface RealClip { proxyUrl: string; trackUrl: string; edit?: ClipEdit; silences: Range[]; keywords: string[]; hook?: string }
+export interface RealClip { proxyUrl: string; trackUrl: string; peopleUrl: string; edit?: ClipEdit; silences: Range[]; keywords: string[]; hook?: string }
 type Props = { project: MockProject; clip: MockClip; clips: MockClip[]; real?: RealClip }
-type Loaded = { state: EditorState; track: Keyframe[]; settingsBrand: EditorState['brand'] }
+type Loaded = { state: EditorState; track: Keyframe[]; settingsBrand: EditorState['brand']; people: People | null }
 
 
 /** Loads saved brand kit + default subtitle preset, then mounts the editor with them as the first undo state. */
@@ -42,6 +43,7 @@ export function EditorShell(props: Props) {
     const track: Promise<Keyframe[]> = props.real
       ? fetch(props.real.trackUrl).then((r) => (r.ok ? r.json() : { keyframes: [[0, 0.5, 0.5]] })).then((j) => j.keyframes).catch(() => [[0, 0.5, 0.5]])
       : Promise.resolve([[0, 0.5, 0.5]])
+    const people: Promise<People | null> = props.real ? fetch(props.real.peopleUrl).then((r) => (r.ok ? r.json() : null)).catch(() => null) : Promise.resolve(null)
     Promise.all([fetch('/api/settings/brandKit').then((r) => r.json()), fetch('/api/settings/subtitlePresets').then((r) => r.json())])
       .catch(() => [undefined, undefined])
       .then(async ([brand, presets]) => {
@@ -49,7 +51,7 @@ export function EditorShell(props: Props) {
         const e = props.real?.edit
         const base: EditorState = {
           aspect: '9:16',
-          layoutId: props.real ? 'single' : layoutsFor(props.project.contentType)[0]?.id ?? 'single',
+          layoutId: props.real ? defaultLayout(await people) : layoutsFor(props.project.contentType)[0]?.id ?? 'single',
           style: all.find((p) => p.id === presets?.defaultId) ?? builtinPresets[0],
           subtitlesOn: true, watermarkOn: true,
           brand: brand ?? { position: 'br', opacity: 80, sizePct: 12, marginPct: 4 },
@@ -61,7 +63,7 @@ export function EditorShell(props: Props) {
         }
         const saved: Partial<ClipEdit> = { ...e }
         delete saved.keep; delete saved.zooms // derived from the switches; worked out again here
-        setInitial({ state: { ...base, ...saved } as EditorState, track: await track, settingsBrand: base.brand })
+        setInitial({ state: { ...base, ...saved } as EditorState, track: await track, settingsBrand: base.brand, people: await people })
       })
   }, [props.clip, props.project.contentType, props.real])
 
@@ -74,13 +76,13 @@ export function EditorShell(props: Props) {
         <Button asChild><Link href={`/projects/${props.project.id}/clips`}>Back to clips</Link></Button>
       </div>
       <div className="hidden h-dvh lg:flex">
-        {initial ? <Editor key={props.clip.id} {...props} initial={initial.state} track={initial.track} settingsBrand={initial.settingsBrand} /> : <div className="m-auto size-8 animate-spin rounded-full border-2 border-muted border-t-cf-accent" />}
+        {initial ? <Editor key={props.clip.id} {...props} initial={initial.state} track={initial.track} settingsBrand={initial.settingsBrand} people={initial.people} /> : <div className="m-auto size-8 animate-spin rounded-full border-2 border-muted border-t-cf-accent" />}
       </div>
     </>
   )
 }
 
-function Editor({ project, clip, clips, initial, real, track, settingsBrand }: Props & { initial: EditorState; track: Keyframe[]; settingsBrand: EditorState['brand'] }) {
+function Editor({ project, clip, clips, initial, real, track, settingsBrand, people }: Props & { initial: EditorState; track: Keyframe[]; settingsBrand: EditorState['brand']; people: People | null }) {
   const [h, dispatch] = useReducer(historyReducer<EditorState>, initial, initHistory)
   const [section, setSection] = useState<SectionId>('subtitles')
   const [t, setT] = useState(initial.trim.start)
@@ -120,7 +122,7 @@ function Editor({ project, clip, clips, initial, real, track, settingsBrand }: P
     return () => cancelAnimationFrame(raf)
   }, [playing, real, state.trim.start, state.trim.end])
 
-  const video = real ? { src: real.proxyUrl, track, playing, onTime: setT, videoRef, ...cuts } : undefined
+  const video = real ? { src: real.proxyUrl, track, people, playing, onTime: setT, videoRef, ...cuts } : undefined
   // Real clips: no second preview in the side panel (a second video + libass instance is too heavy for 8 GB).
   const frame = (cls: string, testIds = true) => (real && !testIds ? null
     : <CanvasFrame state={state} t={t} thumbnail={project.thumbnail} className={cls} testIds={testIds} real={video} />)
@@ -142,7 +144,7 @@ function Editor({ project, clip, clips, initial, real, track, settingsBrand }: P
         <aside className="flex w-[360px] shrink-0 flex-col overflow-y-auto border-l bg-cf-panel">
           <h2 className="sticky top-0 z-10 bg-cf-panel/95 px-5 pb-3 pt-5 text-lg font-bold backdrop-blur">{SECTIONS.find((s) => s.id === section)?.label}</h2>
           <div className="px-5 pb-8">
-            <Panel state={state} set={set} project={project} clip={clip} clips={clips} preview={frame('w-36', false)} real={!!real} saveEdit={async () => { await flushEdit(); await saveEdit(state) }} />
+            <Panel state={state} set={set} project={project} clip={clip} clips={clips} preview={frame('w-36', false)} real={!!real} people={people} saveEdit={async () => { await flushEdit(); await saveEdit(state) }} />
           </div>
         </aside>
         <Rail value={section} onChange={setSection} />

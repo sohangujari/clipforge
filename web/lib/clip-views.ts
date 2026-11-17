@@ -6,6 +6,7 @@ import { getDb } from './db'
 import { dataDir } from './paths'
 import type { ClipEdit } from './clip-edit'
 import type { Range } from './cuts'
+import type { People } from './people'
 import type { MockClip, Word } from './mock'
 
 /** A real clip in the same shape as the Phase 1 MockClip, so ClipCard/ClipDetails/editor accept both. */
@@ -21,6 +22,13 @@ export function readWords(projectId: string): Word[] {
   try {
     return JSON.parse(readFileSync(join(/*turbopackIgnore: true*/ dataDir(), 'media', projectId, 'transcript.json'), 'utf8')).words
   } catch { return [] }
+}
+
+/** Speakers and the speaker-layout plan; null before Phase 6 or when detection was skipped. */
+export function readPeople(projectId: string): People | null {
+  try {
+    return JSON.parse(readFileSync(join(/*turbopackIgnore: true*/ dataDir(), 'media', projectId, 'people.json'), 'utf8'))
+  } catch { return null }
 }
 
 /** Pauses found in the audio (worker/clipforge_worker/pauses.py); none before Phase 4b or "Find clips again". */
