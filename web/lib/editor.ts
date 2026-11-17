@@ -19,6 +19,11 @@ export interface EditorState {
   words: Word[]
   safeZone: SafeZone
   resolution: '1080p' | '720p'
+  removeFillers: boolean
+  removePauses: boolean
+  autoZoom: boolean
+  hook: { on: boolean; text: string }
+  bumpers: boolean
 }
 
 export const ASPECT_RATIO: Record<Aspect, number> = { '9:16': 9 / 16, '1:1': 1, '16:9': 16 / 9 }

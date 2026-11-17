@@ -1,10 +1,11 @@
 'use client'
-import { useCallback, useEffect, useReducer, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react'
 import { toast } from 'sonner'
 import Link from 'next/link'
 import { Monitor } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { toEdit, type ClipEdit } from '@/lib/clip-edit'
+import { derive, toEdit, type ClipEdit, type ClipMedia } from '@/lib/clip-edit'
+import type { Range } from '@/lib/cuts'
 import type { EditorState } from '@/lib/editor'
 import type { Keyframe } from '@/lib/reframe'
 import { useAutosave } from '@/lib/use-autosave'
@@ -29,7 +30,7 @@ const PANELS: Record<SectionId, (p: PanelProps) => React.ReactNode> = {
   clips: ClipsPanel, layout: LayoutPanel, subtitles: SubtitlesPanel, branding: BrandingPanel, ai: AiPanel, export: ExportPanel, settings: SettingsPanel,
 }
 
-export interface RealClip { proxyUrl: string; trackUrl: string; edit?: ClipEdit }
+export interface RealClip { proxyUrl: string; trackUrl: string; edit?: ClipEdit; silences: Range[]; keywords: string[]; hook?: string }
 type Props = { project: MockProject; clip: MockClip; clips: MockClip[]; real?: RealClip }
 type Loaded = { state: EditorState; track: Keyframe[]; settingsBrand: EditorState['brand'] }
 
@@ -54,8 +55,13 @@ export function EditorShell(props: Props) {
           brand: brand ?? { position: 'br', opacity: 80, sizePct: 12, marginPct: 4 },
           trim: { start: props.clip.startSec, end: props.clip.endSec },
           words: props.clip.transcript, safeZone: 'off', resolution: '1080p',
+          // Phase 4b: on by default — clips come out tight and punchy without hand editing (same defaults as lib/exports.ts)
+          removeFillers: true, removePauses: true, autoZoom: true, bumpers: true,
+          hook: { on: !!props.real, text: props.real?.hook ?? props.clip.titles[0] ?? '' },
         }
-        setInitial({ state: e ? { ...base, ...e } : base, track: await track, settingsBrand: base.brand })
+        const saved: Partial<ClipEdit> = { ...e }
+        delete saved.keep; delete saved.zooms // derived from the switches; worked out again here
+        setInitial({ state: { ...base, ...saved } as EditorState, track: await track, settingsBrand: base.brand })
       })
   }, [props.clip, props.project.contentType, props.real])
 
@@ -82,12 +88,14 @@ function Editor({ project, clip, clips, initial, real, track, settingsBrand }: P
   const state = h.present
   const set = useCallback((patch: Partial<EditorState>) => dispatch({ type: 'set', value: { ...h.present, ...patch } }), [h.present])
   const videoRef = useRef<HTMLVideoElement>(null)
+  const media: ClipMedia = useMemo(() => ({ silences: real?.silences ?? [], keywords: real?.keywords ?? [] }), [real])
+  const cuts = useMemo(() => derive(state, media), [state, media])
   const saveEdit = useCallback(async (s: EditorState) => {
     if (!real) return
     // keepalive: the last change still saves when you leave the editor or close the tab right after making it
-    const r = await fetch(`/api/clips/${clip.id}`, { method: 'PATCH', keepalive: true, body: JSON.stringify({ edit: toEdit(s, settingsBrand) }) })
+    const r = await fetch(`/api/clips/${clip.id}`, { method: 'PATCH', keepalive: true, body: JSON.stringify({ edit: toEdit(s, settingsBrand, media) }) })
     if (!r.ok) toast.error("Couldn't save your changes to this clip")
-  }, [real, clip.id, settingsBrand])
+  }, [real, clip.id, settingsBrand, media])
   const flushEdit = useAutosave(state, saveEdit)
 
   useEffect(() => {
@@ -112,10 +120,10 @@ function Editor({ project, clip, clips, initial, real, track, settingsBrand }: P
     return () => cancelAnimationFrame(raf)
   }, [playing, real, state.trim.start, state.trim.end])
 
-  const media = real ? { src: real.proxyUrl, track, playing, onTime: setT, videoRef } : undefined
+  const video = real ? { src: real.proxyUrl, track, playing, onTime: setT, videoRef, ...cuts } : undefined
   // Real clips: no second preview in the side panel (a second video + libass instance is too heavy for 8 GB).
   const frame = (cls: string, testIds = true) => (real && !testIds ? null
-    : <CanvasFrame state={state} t={t} thumbnail={project.thumbnail} className={cls} testIds={testIds} real={media} />)
+    : <CanvasFrame state={state} t={t} thumbnail={project.thumbnail} className={cls} testIds={testIds} real={video} />)
   const Panel = PANELS[section]
   const view = { start: Math.max(0, clip.startSec - 30), end: Math.min(project.durationSec, clip.endSec + 30) }
 
@@ -129,7 +137,7 @@ function Editor({ project, clip, clips, initial, real, track, settingsBrand }: P
           <div className="flex min-h-0 flex-1 items-center justify-center">
             {frame(state.aspect === '16:9' ? 'w-full max-w-3xl' : 'h-full max-h-[calc(100dvh-14rem)]')}
           </div>
-          <Timeline trim={state.trim} view={view} words={state.words} t={t} onSeek={setT} onTrim={(trim) => set({ trim })} />
+          <Timeline trim={state.trim} keep={real ? cuts.keep : undefined} view={view} words={state.words} t={t} onSeek={setT} onTrim={(trim) => set({ trim })} />
         </main>
         <aside className="flex w-[360px] shrink-0 flex-col overflow-y-auto border-l bg-cf-panel">
           <h2 className="sticky top-0 z-10 bg-cf-panel/95 px-5 pb-3 pt-5 text-lg font-bold backdrop-blur">{SECTIONS.find((s) => s.id === section)?.label}</h2>

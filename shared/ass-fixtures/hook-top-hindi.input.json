@@ -1,0 +1,69 @@
+{
+  "style": {
+    "font": "Inter",
+    "sizePx": 48,
+    "weight": 700,
+    "case": "none",
+    "color": "#FFFFFF",
+    "activeColor": "#FFE14D",
+    "stroke": {
+      "color": "#000000",
+      "width": 0
+    },
+    "shadow": null,
+    "box": {
+      "color": "#000000",
+      "opacity": 70,
+      "radius": 12,
+      "padding": 14
+    },
+    "wordsPerLine": 4,
+    "lines": 1,
+    "animation": "highlight",
+    "position": "top",
+    "offsetPct": 0,
+    "emoji": false,
+    "emphasis": true,
+    "id": "boxed",
+    "name": "Boxed"
+  },
+  "words": [
+    {
+      "w": "हम",
+      "s": 0,
+      "e": 0.45
+    },
+    {
+      "w": "बाज़ार",
+      "s": 0.5,
+      "e": 0.95
+    },
+    {
+      "w": "गए",
+      "s": 1,
+      "e": 1.45
+    },
+    {
+      "w": "और",
+      "s": 1.5,
+      "e": 1.95
+    },
+    {
+      "w": "खाना",
+      "s": 2,
+      "e": 2.45
+    },
+    {
+      "w": "ख़रीदा",
+      "s": 2.5,
+      "e": 2.95
+    }
+  ],
+  "width": 1920,
+  "height": 1080,
+  "duration": 2.5,
+  "hook": {
+    "text": "यह देखो",
+    "end": 3
+  }
+}

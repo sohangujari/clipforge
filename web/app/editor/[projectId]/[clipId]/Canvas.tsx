@@ -3,6 +3,7 @@ import { useMemo, type RefObject } from 'react'
 import { AssOverlay } from '@/components/cf/AssOverlay'
 import { ClipVideo, type RealLayout } from '@/components/cf/ClipVideo'
 import { buildAss } from '@/lib/ass'
+import { keptDuration, retimeWords, type Range } from '@/lib/cuts'
 import { outputSize, type Keyframe } from '@/lib/reframe'
 import { ASPECT_RATIO, chunkAt, type EditorState, type SafeZone } from '@/lib/editor'
 import { LAYOUTS, type ThumbRect } from '@/lib/layouts'
@@ -34,17 +35,20 @@ function Region({ r, thumbnail }: { r: ThumbRect; thumbnail: string }) {
   )
 }
 
-export interface RealMedia { src: string; track: Keyframe[]; playing: boolean; onTime: (t: number) => void; videoRef: RefObject<HTMLVideoElement | null> }
+export interface RealMedia { src: string; track: Keyframe[]; playing: boolean; onTime: (t: number) => void; videoRef: RefObject<HTMLVideoElement | null>; keep: Range[]; zooms: Range[] }
 
-/** The clip-relative ASS for the editor state: same input the export builds (worker render job). */
-export function assFor(state: EditorState): string {
+export const HOOK_S = 3 // the hook line shows over the first seconds (worker/clipforge_worker/stages/render.py)
+
+/** The ASS for the editor state on the cut clip's clock: same input the export builds (worker render job). */
+export function assFor(state: EditorState, keep: Range[]): string {
   const { start, end } = state.trim
   const b = state.brand
   const text = state.watermarkOn && !b.logoPath && b.text?.value
   const { w: width, h: height } = outputSize(state.aspect, '1080p') // libass scales this to the canvas (and to 720p on export)
   return buildAss({
-    style: state.style, width, height, duration: end - start,
-    words: state.subtitlesOn ? state.words.filter((w) => w.s >= start - 0.05 && w.e <= end + 0.05).map((w) => ({ w: w.w, s: w.s - start, e: w.e - start })) : [],
+    style: state.style, width, height, duration: keptDuration(keep),
+    words: state.subtitlesOn ? retimeWords(state.words.filter((w) => w.s >= start - 0.05 && w.e <= end + 0.05), keep) : [],
+    hook: state.hook.on && state.hook.text ? { text: state.hook.text, end: HOOK_S } : null,
     watermarkText: text ? { value: b.text!.value, font: b.text!.font, color: b.text!.color, opacity: (b.opacity * b.text!.opacity) / 100, position: b.position, marginPct: b.marginPct, sizePct: b.sizePct } : null,
   })
 }
@@ -56,15 +60,15 @@ export function CanvasFrame({ state, t, thumbnail, className, testIds = true, re
   const chunk = chunkAt(state.words, state.style.wordsPerLine * state.style.lines, t)
   const b = state.brand
   const logoSrc = b.logoPath ? `/api/files/${b.logoPath}` : null
-  const ass = useMemo(() => (real ? assFor(state) : ''), [real, state])
+  const ass = useMemo(() => (real ? assFor(state, real.keep) : ''), [real, state])
   return (
     <div data-testid={testIds ? 'canvas-frame' : undefined} className={cn('relative overflow-hidden rounded-xl bg-black shadow-cf [container-type:inline-size]', className)}
       style={{ aspectRatio: ASPECT_RATIO[state.aspect] }}>
       {real ? (
         <>
-          <ClipVideo src={real.src} track={real.track} aspect={state.aspect} layout={state.layoutId as RealLayout} trim={state.trim}
+          <ClipVideo src={real.src} track={real.track} aspect={state.aspect} layout={state.layoutId as RealLayout} keep={real.keep} zooms={real.zooms}
             t={t} playing={real.playing} onTime={real.onTime} videoRef={real.videoRef} />
-          <AssOverlay ass={ass} videoRef={real.videoRef} offset={state.trim.start} />
+          <AssOverlay ass={ass} videoRef={real.videoRef} keep={real.keep} />
         </>
       ) : layout.thumb.map((r, i) => <Region key={i} r={r} thumbnail={thumbnail} />)}
       {!real && state.subtitlesOn && chunk.words.length > 0 && (

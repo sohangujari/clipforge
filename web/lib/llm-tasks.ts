@@ -77,14 +77,17 @@ const score = task({
 
 const MetaItem = z.object({ key: z.string(), titles: upTo(txt(60), 3).refine((a) => a.length > 0), // not a tuple: Gemini rejects array-form "items"
   descriptions: z.object({ shorts: txt(500), tiktok: txt(500), reels: txt(500) }),
-  hashtags: upTo(tag, 10).overwrite((a) => a.filter((h) => h.length > 1).slice(0, 10)) })
+  hashtags: upTo(tag, 10).overwrite((a) => a.filter((h) => h.length > 1).slice(0, 10)),
+  // Burned in with the bundled fonts, which have no emoji (libass would draw boxes) — so emoji are stripped.
+  hook: z.string().overwrite((s) => s.replace(/[\p{Extended_Pictographic}\u{FE0F}\u{200D}]/gu, '').replace(/\s+/g, ' ').trim().slice(0, 70)).optional().catch(undefined),
+  keywords: upTo(txt(40), 6).optional().catch(undefined) })
 
 const metadata = task({
   input: z.object({ contentType: z.string().default('custom'), tone: z.string().default('neutral'), language: z.string().default('en'),
     clips: z.array(z.object({ key: z.string(), text: z.string().max(6000) })).min(1).max(12) }),
   output: z.object({ items: z.array(MetaItem) }),
   slots: ['titles', 'highlight'],
-  system: (i) => `You write packaging for short-form clips (${i.contentType}, tone: ${i.tone}) in the transcript's language (${i.language}). For each clip: 3 different hook-style titles under 60 characters (curiosity, no clickbait lies); a description per platform — YouTube Shorts (one clear sentence + call to action), TikTok (casual, 1–2 emoji), Instagram Reels (a hook line, then "save this"-style prompt); 5–10 relevant hashtags starting with #.`,
+  system: (i) => `You write packaging for short-form clips (${i.contentType}, tone: ${i.tone}) in the transcript's language (${i.language}). For each clip: 3 different hook-style titles under 60 characters (curiosity, no clickbait lies); a description per platform — YouTube Shorts (one clear sentence + call to action), TikTok (casual, 1–2 emoji), Instagram Reels (a hook line, then "save this"-style prompt); 5–10 relevant hashtags starting with #; a "hook": one short line shown on screen over the first 3 seconds to stop the scroll (under 50 characters, no emoji, no hashtags); "keywords": 3–6 single words copied exactly from the clip's transcript that deserve emphasis (the punchline, a surprising fact, a strong emotion).`,
   prompt: (i) => i.clips.map((c) => `Clip ${c.key}:\n${c.text}`).join('\n\n'),
 })
 

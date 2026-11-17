@@ -10,7 +10,8 @@ type Position = (typeof POSITIONS)[number]
 
 export interface AssWord { w: string; s: number; e: number }
 export interface AssWatermark { value: string; font: string; color: string; opacity: number; position: Position; marginPct: number; sizePct: number }
-export interface AssInput { style: SubtitleStyle; words: AssWord[]; width: number; height: number; duration: number; watermarkText?: AssWatermark | null }
+export interface AssHook { text: string; end: number }
+export interface AssInput { style: SubtitleStyle; words: AssWord[]; width: number; height: number; duration: number; watermarkText?: AssWatermark | null; hook?: AssHook | null }
 
 export const FALLBACK_FONT = 'Noto Sans Devanagari'
 /** Every bundled font file. The preview preloads them all into libass (~1 MB), as FFmpeg's fontsdir does for the export, so both
@@ -68,6 +69,12 @@ export function buildAss(i: AssInput): string {
     styles.push(styleLine('Watermark', fontFor(wm.font, 600), round((W * Math.max(2.5, wm.sizePct / 3)) / 100), colour(wm.color, alphaOf(wm.opacity)),
       colour(wm.color), colour('#000000', 0x80), colour('#000000', 0x80), 1, 0, 2, ALIGN[wm.position], m, m, m))
   }
+  const hook = i.hook?.text.trim() ? i.hook : null
+  if (hook) { // the AI hook line: dark text on a white box over the first seconds
+    const u = Math.min(W, H)
+    styles.push(styleLine('Hook', fontFor(DEVANAGARI.test(hook.text) ? FALLBACK_FONT : st.font, 800), round(u * 0.065), colour('#111113'), colour('#111113'),
+      colour('#FFFFFF'), colour('#FFFFFF'), 4, round(u * 0.02), 0, 5, round(W * 0.1), round(W * 0.1), 0))
+  }
 
   const x = round(W / 2)
   const y = round((H * Math.min(95, Math.max(5, SUB_TOP[st.position] + st.offsetPct))) / 100)
@@ -102,6 +109,10 @@ export function buildAss(i: AssInput): string {
     })
   }
   if (wm?.value) events.push(`Dialogue: 1,${time(0)},${time(i.duration)},Watermark,,0,0,0,,${clean(wm.value, 'none')}`)
+  if (hook) {
+    const hy = round((H * (st.position === 'top' ? 34 : 22)) / 100) // clear of top-placed subtitles
+    events.push(`Dialogue: 2,${time(0)},${time(Math.min(hook.end, i.duration))},Hook,,0,0,0,,{\\pos(${x},${hy})\\fad(150,200)}${clean(hook.text.trim(), 'none')}`)
+  }
 
   return [
     '[Script Info]', 'ScriptType: v4.00+', `PlayResX: ${W}`, `PlayResY: ${H}`, 'WrapStyle: 0', 'ScaledBorderAndShadow: yes', 'YCbCr Matrix: None', '',

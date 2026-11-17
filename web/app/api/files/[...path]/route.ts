@@ -4,9 +4,9 @@ import { extname, join, resolve, sep } from 'node:path'
 import { attachment, safeFilename } from '@/lib/filenames'
 import { dataDir } from '@/lib/paths'
 
-const ROOTS = new Set(['logos', 'fonts', 'media', 'renders'])
+const ROOTS = new Set(['logos', 'fonts', 'media', 'renders', 'bumpers'])
 const TYPES: Record<string, string> = {
-  '.png': 'image/png', '.jpg': 'image/jpeg', '.svg': 'image/svg+xml', '.mp4': 'video/mp4',
+  '.png': 'image/png', '.jpg': 'image/jpeg', '.svg': 'image/svg+xml', '.mp4': 'video/mp4', '.mov': 'video/quicktime', '.webm': 'video/webm',
   '.json': 'application/json', '.zip': 'application/zip', '.ttf': 'font/ttf', '.otf': 'font/otf', '.woff': 'font/woff', '.woff2': 'font/woff2',
 }
 // media/ also holds source videos, audio and transcripts — only these are served:
@@ -39,7 +39,7 @@ export async function GET(req: Request, ctx: { params: Promise<{ path: string[] 
     return new Response(Readable.toWeb(createReadStream(file)) as ReadableStream,
       { headers: { ...headers, 'Content-Length': String(size), 'Content-Disposition': attachment(name), 'Cache-Control': 'no-store' } })
   }
-  if (type !== 'video/mp4') return new Response(readFileSync(file), { headers })
+  if (!type.startsWith('video/')) return new Response(readFileSync(file), { headers })
 
   headers['Accept-Ranges'] = 'bytes'
   const m = /^bytes=(\d*)-(\d*)$/.exec(req.headers.get('range') ?? '')

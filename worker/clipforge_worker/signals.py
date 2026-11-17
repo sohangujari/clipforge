@@ -96,6 +96,8 @@ def _frames(session, x: np.ndarray, report) -> np.ndarray:
 
 
 def run(ctx) -> None:
+    from . import pauses
+    pauses.ensure(ctx.media_dir)  # cheap; also fills in projects from before Phase 4b on "Find clips again"
     out = ctx.media_dir / "signals.json"
     if out.exists() and out.stat().st_size > 0:
         ctx.report(1.0)

@@ -5,12 +5,14 @@ import { join } from 'node:path'
 import { getDb } from './db'
 import { dataDir } from './paths'
 import type { ClipEdit } from './clip-edit'
+import type { Range } from './cuts'
 import type { MockClip, Word } from './mock'
 
 /** A real clip in the same shape as the Phase 1 MockClip, so ClipCard/ClipDetails/editor accept both. */
 export interface ClipView extends MockClip {
   status: 'new' | 'kept' | 'deleted'; source: 'auto' | 'search'; query?: string; thumbnailUrl?: string
   signals: Record<string, number>; signalsUsed: string[]; reasons: Record<string, string>; edit?: ClipEdit
+  hook?: string; keywords: string[]
 }
 
 type Row = Awaited<ReturnType<ReturnType<typeof getDb>['clip']['findFirstOrThrow']>>
@@ -18,6 +20,13 @@ type Row = Awaited<ReturnType<ReturnType<typeof getDb>['clip']['findFirstOrThrow
 export function readWords(projectId: string): Word[] {
   try {
     return JSON.parse(readFileSync(join(/*turbopackIgnore: true*/ dataDir(), 'media', projectId, 'transcript.json'), 'utf8')).words
+  } catch { return [] }
+}
+
+/** Pauses found in the audio (worker/clipforge_worker/pauses.py); none before Phase 4b or "Find clips again". */
+export function readSilences(projectId: string): Range[] {
+  try {
+    return JSON.parse(readFileSync(join(/*turbopackIgnore: true*/ dataDir(), 'media', projectId, 'silences.json'), 'utf8')).silences
   } catch { return [] }
 }
 
@@ -34,6 +43,7 @@ export function toClipView(r: Row, words: Word[]): ClipView {
     status: r.status as ClipView['status'], source: r.source as ClipView['source'], query: r.query ?? undefined,
     thumbnailUrl: existsSync(thumb) ? `/api/files/media/${r.projectId}/clips/${r.id}.jpg` : undefined,
     edit: r.edit ? JSON.parse(r.edit) : undefined,
+    hook: r.hook ?? undefined, keywords: r.keywords ? JSON.parse(r.keywords) : [],
   }
 }
 

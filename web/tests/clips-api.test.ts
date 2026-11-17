@@ -205,3 +205,33 @@ test('an edit may leave out the brand kit (then the current Settings apply)', as
   expect(res.status).toBe(200)
   expect((await res.json()).edit.brand).toBeUndefined()
 })
+
+test('an unopened clip exports with fillers and pauses cut, zooms on the AI keywords and the AI hook line', async () => {
+  const { p, ids } = await projectWithClips()
+  writeFileSync(join(dir, 'media', p.id, 'silences.json'), JSON.stringify({ silences: [[20, 22], [100, 101]] }))
+  const d = await db()
+  await d.clip.update({ where: { id: ids[0] }, data: { hook: 'Nobody saw this coming', keywords: '["world"]' } })
+  const { jobId } = await (await post('@/app/api/clips/[id]/export/route', ids[0], { resolution: '1080p' })).json()
+  const e = JSON.parse((await d.job.findUniqueOrThrow({ where: { id: jobId } })).payload!).edits[ids[0]]
+  expect(e).toMatchObject({ removeFillers: true, removePauses: true, autoZoom: true, bumpers: true, hook: { on: true, text: 'Nobody saw this coming' } })
+  expect(e.keep).toEqual([[10, 20.12], [21.88, 40]])
+  expect(e.zooms).toEqual([[10.5, 11.5]])
+  const { jobId: j2 } = await (await post('@/app/api/clips/[id]/export/route', ids[1], { resolution: '1080p' })).json()
+  expect(JSON.parse((await d.job.findUniqueOrThrow({ where: { id: j2 } })).payload!).edits[ids[1]].hook.text).toBe('T1') // no AI hook: first title
+})
+
+test('an edit saves the auto-edit switches with its cut list; edits from before Phase 4b still load', async () => {
+  const { ids } = await projectWithClips()
+  const edit = { ...(await validEdit()), removeFillers: false, removePauses: true, autoZoom: false, hook: { on: true, text: 'Hi' }, bumpers: false, keep: [[11, 20], [21, 39]], zooms: [] }
+  expect((await (await patch(ids[0], { edit })).json()).edit).toMatchObject({ removeFillers: false, keep: [[11, 20], [21, 39]], hook: { text: 'Hi' } })
+  expect((await patch(ids[1], { edit: await validEdit() })).status).toBe(200)
+  expect((await patch(ids[1], { edit: { ...edit, hook: { on: true, text: 'x'.repeat(200) } } })).status).toBe(400)
+})
+
+test('the clip view carries the AI hook and keywords', async () => {
+  const { ids } = await projectWithClips()
+  await (await db()).clip.update({ where: { id: ids[0] }, data: { hook: 'H', keywords: '["a","b"]' } })
+  const { getClip } = await import('@/lib/clip-views')
+  expect(await getClip(ids[0])).toMatchObject({ hook: 'H', keywords: ['a', 'b'] })
+  expect((await getClip(ids[1]))!.keywords).toEqual([])
+})

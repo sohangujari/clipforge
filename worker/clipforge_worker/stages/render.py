@@ -9,6 +9,7 @@ from functools import cache
 from ..errors import UserError
 from ..media import probe
 from ..render.ass import FONTS_DIR, build_ass
+from ..render.cuts import kept_duration, retime_words
 from ..render.graph import build_command, output_size, safe_filename
 from . import faces
 
@@ -19,11 +20,34 @@ def encoder() -> str:
     return "h264_videotoolbox" if "h264_videotoolbox" in out else "libx264"
 
 
-def _words(edit: dict, words: list, start: float, end: float) -> list:
+def _words(edit: dict, words: list, start: float, end: float, keep: list) -> list:
+    """Subtitle words on the finished clip's clock (cuts removed): the same list the editor preview draws."""
     if not edit["subtitlesOn"]:
         return []
     src = edit.get("words") or words
-    return [{"w": w["w"], "s": w["s"] - start, "e": w["e"] - start} for w in src if w["s"] >= start - 0.05 and w["e"] <= end + 0.05]
+    return retime_words([w for w in src if w["s"] >= start - 0.05 and w["e"] <= end + 0.05], keep)
+
+
+def _keep(edit: dict, start: float, end: float) -> list:
+    """The saved cut list, clamped to what the video allows; none saved (or all cut) → the whole trim."""
+    keep = [[max(a, start), min(b, end)] for a, b in edit.get("keep") or []]
+    return [r for r in keep if r[1] - r[0] > 0.05] or [[start, end]]
+
+
+def _bumpers(ctx, edit: dict):
+    """(intro, outro) from the brand kit, each (path, has_audio, duration) or None."""
+    if not edit.get("bumpers"):
+        return None, None
+    out = []
+    for key in ("introPath", "outroPath"):
+        rel = edit["brand"].get(key)
+        p = ctx.data_dir / rel if rel else None
+        if p and p.is_file():
+            i = probe(p)
+            out.append((p, i["has_audio"], i["duration"]))
+        else:
+            out.append(None)
+    return tuple(out)
 
 
 def _watermark_text(edit: dict):
@@ -81,18 +105,26 @@ def run(ctx) -> None:
         start, end = edit["trim"]["start"], min(edit["trim"]["end"], duration)
         if end - start < 0.2:
             raise UserError("This clip is shorter than the video allows — check its trim")
+        keep = _keep(edit, start, end)
+        rel = [[a - start, b - start] for a, b in keep]
+        hook = edit.get("hook") or {}
+        zooms = [[a - start, b - start] for a, b in edit.get("zooms") or []] if edit["layoutId"] == "single" else []
+        intro, outro = _bumpers(ctx, edit)
+        total = kept_duration(keep) + sum(b[2] for b in (intro, outro) if b)
         label = f"Rendering clip {n + 1} of {len(ids)}" if len(ids) > 1 else "Rendering"
         ctx.report(n / len(ids), label)
         W, H = output_size(edit["aspect"], "1080p")  # ASS is laid out at 1080p; libass scales it to 720p
         ass_name, out_name = f"{cid}.ass", f"{cid}-{res}.tmp.mp4"
-        (out_dir / ass_name).write_text(build_ass({"style": edit["style"], "words": _words(edit, words, start, end), "width": W, "height": H,
-                                                   "duration": end - start, "watermarkText": _watermark_text(edit)}))
-        cmd = build_command(src, out_name, edit, keyframes, info["width"], info["height"], start, end, _logo(ctx, edit), ass_name, encoder())
+        (out_dir / ass_name).write_text(build_ass({"style": edit["style"], "words": _words(edit, words, start, end, keep), "width": W, "height": H,
+                                                   "duration": kept_duration(keep), "watermarkText": _watermark_text(edit),
+                                                   "hook": {"text": hook["text"], "end": 3} if hook.get("on") and hook.get("text") else None}))
+        cmd = build_command(src, out_name, edit, keyframes, info["width"], info["height"], start, end, _logo(ctx, edit), ass_name, encoder(),
+                            keep=rel, zooms=zooms, fps=info["fps"], has_audio=info["has_audio"], bumpers=(intro, outro))
         proc = subprocess.Popen(cmd, cwd=out_dir, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
         try:
             for line in proc.stdout:
                 if line.startswith("out_time_us=") and line[12:].strip().isdigit():
-                    ctx.report((n + min(1.0, int(line[12:]) / 1e6 / (end - start))) / len(ids), label)
+                    ctx.report((n + min(1.0, int(line[12:]) / 1e6 / total)) / len(ids), label)
             err = proc.stderr.read()
             if proc.wait() != 0:
                 raise RuntimeError("FFmpeg failed: " + " | ".join(err.strip().splitlines()[-3:]))

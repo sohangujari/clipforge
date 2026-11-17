@@ -83,6 +83,12 @@ def build_ass(i: dict) -> str:
         styles.append(_style_line("Watermark", font_for(wm["font"], 600), _round(W * max(2.5, wm["sizePct"] / 3) / 100),
                                   _colour(wm["color"], _alpha(wm["opacity"])), _colour(wm["color"]), _colour("#000000", 0x80), _colour("#000000", 0x80),
                                   1, 0, 2, ALIGN[wm["position"]], m, m, m))
+    hook = i.get("hook") if i.get("hook") and i["hook"]["text"].strip() else None
+    if hook:  # the AI hook line: dark text on a white box over the first seconds
+        u = min(W, H)
+        styles.append(_style_line("Hook", font_for(FALLBACK_FONT if DEVANAGARI.search(hook["text"]) else st["font"], 800), _round(u * 0.065),
+                                  _colour("#111113"), _colour("#111113"), _colour("#FFFFFF"), _colour("#FFFFFF"), 4, _round(u * 0.02), 0, 5,
+                                  _round(W * 0.1), _round(W * 0.1), 0))
 
     x = _round(W / 2)
     y = _round(H * min(95, max(5, SUB_TOP[st["position"]] + st["offsetPct"])) / 100)
@@ -127,6 +133,9 @@ def build_ass(i: dict) -> str:
             ev(w["s"], end, at + fx, join(parts))
     if wm and wm.get("value"):
         events.append(f"Dialogue: 1,{time(0)},{time(i['duration'])},Watermark,,0,0,0,,{_clean(wm['value'], 'none')}")
+    if hook:
+        hy = _round(H * (34 if st["position"] == "top" else 22) / 100)  # clear of top-placed subtitles
+        events.append(f"Dialogue: 2,{time(0)},{time(min(hook['end'], i['duration']))},Hook,,0,0,0,,{{\\pos({x},{hy})\\fad(150,200)}}{_clean(hook['text'].strip(), 'none')}")
 
     return "\n".join([
         "[Script Info]", "ScriptType: v4.00+", f"PlayResX: {W}", f"PlayResY: {H}", "WrapStyle: 0", "ScaledBorderAndShadow: yes", "YCbCr Matrix: None", "",

@@ -2,13 +2,14 @@
 import { useRef } from 'react'
 import { fmtDuration } from '@/lib/clips'
 import type { Word } from '@/lib/mock'
+import { keptDuration, type Range } from '@/lib/cuts'
 
 const MIN_LEN = 5
 export const SPEAKER_COLORS = ['#F26B5B', '#5B8DF2', '#3FA796', '#E2B33C']
 
 /** view = fixed window (the original clip plus context) so the scale doesn't shift while dragging. */
-export function Timeline({ trim, view, words, t, onTrim, onSeek }: {
-  trim: { start: number; end: number }; view: { start: number; end: number }; words: Word[]; t: number
+export function Timeline({ trim, keep, view, words, t, onTrim, onSeek }: {
+  trim: { start: number; end: number }; keep?: Range[]; view: { start: number; end: number }; words: Word[]; t: number
   onTrim: (trim: { start: number; end: number }) => void; onSeek: (t: number) => void
 }) {
   const ref = useRef<HTMLDivElement>(null)
@@ -37,7 +38,7 @@ export function Timeline({ trim, view, words, t, onTrim, onSeek }: {
   return (
     <div className="flex flex-col gap-2 rounded-xl bg-card p-3 shadow-cf">
       <div className="flex justify-between text-[11px] tabular-nums text-muted-foreground">
-        <span>{fmtDuration(trim.start)}</span><span>{fmtDuration(trim.end - trim.start)} clip</span><span>{fmtDuration(trim.end)}</span>
+        <span>{fmtDuration(trim.start)}</span><span>{fmtDuration(keep ? keptDuration(keep) : trim.end - trim.start)} clip{keep && keep.length > 1 && ` · ${fmtDuration(trim.end - trim.start - keptDuration(keep))} cut`}</span><span>{fmtDuration(trim.end)}</span>
       </div>
       <div ref={ref} className="relative h-10 cursor-pointer select-none rounded-lg bg-muted" onPointerDown={(e) => onSeek(timeAt(e.clientX))}>
         {words.map((w, i) => <span key={i} className="absolute top-3 h-4 w-px bg-muted-foreground/30" style={{ left: x(w.s) }} />)}
@@ -47,6 +48,8 @@ export function Timeline({ trim, view, words, t, onTrim, onSeek }: {
           <span role="slider" aria-label="Trim end" aria-valuenow={trim.end} tabIndex={0} onPointerDown={(e) => drag('end', e)}
             className="absolute -right-1.5 inset-y-0 w-3 cursor-ew-resize rounded bg-cf-accent" />
         </div>
+        {keep?.slice(1).map(([a], i) => { const b = keep[i][1] // the gap before each kept part: removed pause or filler
+          return <span key={i} data-testid="timeline-cut" className="pointer-events-none absolute inset-y-0 bg-[repeating-linear-gradient(135deg,rgb(0_0_0/0.35)_0_3px,transparent_3px_6px)]" style={{ left: x(b), width: `calc(${x(a)} - ${x(b)})` }} /> })}
         <span className="pointer-events-none absolute -inset-y-1 w-0.5 rounded bg-foreground" style={{ left: x(t) }} />
       </div>
       <div className="relative h-2.5" aria-label="Speaker track">

@@ -1,7 +1,7 @@
 'use client'
-import { useRef } from 'react'
+import { useRef, useState } from 'react'
 import { toast } from 'sonner'
-import { ImageUp, Trash2 } from 'lucide-react'
+import { Film, ImageUp, Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { BrandControls } from '@/components/cf/BrandControls'
 import { Section } from '@/components/cf/Field'
@@ -51,11 +51,43 @@ export function BrandSection() {
         </Section>
       </section>
       <section className="rounded-xl bg-card p-5 shadow-cf"><BrandControls value={b} onChange={setValue} /></section>
-      <section className="flex flex-col gap-2 rounded-xl bg-card p-5 shadow-cf">
+      <section className="flex flex-col gap-3 rounded-xl bg-card p-5 shadow-cf">
         <h3 className="text-sm font-semibold">Intro & outro</h3>
-        <p className="text-sm text-muted-foreground">Short video bumpers added to every clip — coming in Phase 4.</p>
+        <p className="text-sm text-muted-foreground">Short videos joined before and after every exported clip. Keep them to a few seconds — viewers swipe away from slow starts. MP4, MOV or WebM, max 100 MB.</p>
+        <div className="grid grid-cols-2 gap-3">
+          {(['introPath', 'outroPath'] as const).map((key) => <Bumper key={key} label={key === 'introPath' ? 'Intro' : 'Outro'} path={b[key]}
+            onChange={(path) => setValue({ ...b, [key]: path })} />)}
+        </div>
       </section>
       <SaveBar saving={saving} onSave={() => save()} />
+    </div>
+  )
+}
+
+function Bumper({ label, path, onChange }: { label: string; path?: string; onChange: (path?: string) => void }) {
+  const input = useRef<HTMLInputElement>(null)
+  const [busy, setBusy] = useState(false)
+  const upload = async (file?: File) => {
+    if (!file) return
+    setBusy(true)
+    const fd = new FormData(); fd.append('file', file)
+    const res = await fetch('/api/uploads/bumper', { method: 'POST', body: fd }).catch(() => null)
+    const j = await res?.json().catch(() => ({}))
+    setBusy(false)
+    if (!res?.ok) return toast.error(j?.error ?? 'Upload failed')
+    onChange(j.path)
+  }
+  return (
+    <div className="flex flex-col gap-2">
+      <span className="text-xs font-medium text-muted-foreground">{label}</span>
+      {path
+        ? <video src={`/api/files/${path}`} controls muted playsInline preload="metadata" aria-label={`${label} video`} className="aspect-video w-full rounded-lg bg-black object-contain" />
+        : <div className="flex aspect-video items-center justify-center rounded-lg border border-dashed text-xs text-muted-foreground">None</div>}
+      <div className="flex gap-2">
+        <Button size="sm" variant="secondary" disabled={busy} onClick={() => input.current?.click()}><Film /> {busy ? 'Uploading…' : path ? 'Replace' : `Upload ${label.toLowerCase()}`}</Button>
+        {path && <Button size="sm" variant="ghost" aria-label={`Remove ${label.toLowerCase()}`} onClick={() => onChange(undefined)}><Trash2 /></Button>}
+      </div>
+      <input ref={input} type="file" accept="video/mp4,video/quicktime,video/webm" hidden aria-label={`Upload ${label.toLowerCase()}`} onChange={(e) => upload(e.target.files?.[0])} />
     </div>
   )
 }

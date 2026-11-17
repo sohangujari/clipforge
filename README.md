@@ -2,7 +2,7 @@
 
 Local-first AI video clipping. ClipForge turns long videos into short vertical clips with animated subtitles, your branding, a viral score, and AI-written titles. It runs entirely on your own device: there's no account and no cloud, and you bring your own AI keys or use a free local model through Ollama.
 
-> **Status: Phase 4a of 8.** Paste a link or upload a file, and ClipForge transcribes it on your device, **finds clips** and **exports them as vertical videos**: a face-tracked crop that follows camera cuts, animated subtitles in 10 styles, your logo or @handle, MP4 at 1080p or 720p, or every clip as a ZIP. The editor preview uses the same subtitle engine (libass) and fonts as the export, so what you see is what you get. Filler-word and silence removal, auto-zoom and intro/outro arrive in Phase 4b (see the [roadmap](#roadmap)).
+> **Status: Phase 4 of 8.** Paste a link or upload a file, and ClipForge transcribes it on your device, **finds clips** and **exports them as vertical videos**: a face-tracked crop that follows camera cuts, animated subtitles in 10 styles, your logo or @handle, MP4 at 1080p or 720p, or every clip as a ZIP. The editor preview uses the same subtitle engine (libass) and fonts as the export, so what you see is what you get. Clips come out tight by default: **filler words and long pauses are cut**, the camera **punches in on key words**, an **AI-written hook line** opens each clip, and your **intro/outro** can wrap every export.
 
 ## Requirements
 
@@ -72,6 +72,8 @@ Open a clip to edit it. The editor plays your video cropped the way it will be e
 
 - **Layouts:** *Single speaker* (a 9:16 crop that follows the face, holds still through small movements and jumps cleanly at camera cuts) and *Wide + blur* (the whole frame over a blurred fill). Speaker and gaming layouts arrive in Phases 6 and 7.
 - **Export clip** (editor or clip details) renders an MP4 from the original video with the Mac's hardware encoder; **Download all (ZIP)** on the clips page renders every clip. Finished files are in `data/renders/`.
+- **Auto edits** (AI panel, all on by default): *remove filler words* (um, uh…), *remove long pauses* (pauses over 0.5 s found in the audio shrink to a breath), *auto-zoom* (a quick 12% punch-in on words the AI picked; Single speaker layout), and a *hook line* over the first 3 seconds (written by the AI with the titles; edit it freely). The preview plays the cut version; cut parts are shaded on the timeline.
+- **Intro & outro:** upload short videos in Settings → Brand kit; they're joined to every export (scaled to the clip's size) unless you switch them off for a clip in the Branding panel.
 - **SVG logos** are converted to PNG in your browser when you upload them (FFmpeg can't read SVG).
 
 Measured on an 8 GB M3 with the 12-minute podcast: finding faces and camera cuts takes ~20 s once per video; each 60–90 s clip renders at 1080p in ~10 s; memory stayed above 50% free (worker + FFmpeg peaked at ~470 MB). Files are ~8 Mbit/s (about 60 MB per minute).
@@ -148,7 +150,7 @@ Code lives in `web/` (Next.js 16, App Router, Tailwind 4, shadcn/ui) and `worker
 1. ✅ UI shell + settings (AI providers, brand kit, presets, defaults)
 2. ✅ Import (upload, YouTube/Twitch/Kick/Vimeo) + transcription on the GPU, custom words, Hinglish
 3. ✅ Best-in-class clip finding: clean clip boundaries, laughter/applause + AI signals, plain-language clip search, a viral score you can trust that learns your taste, titles, descriptions, hashtags
-4. ✅ **4a** Export: face-tracked crops, burned-in subtitles matching the preview, watermark, MP4/ZIP · **4b** filler-word and silence removal, auto-zoom, AI hook line, intro/outro
+4. ✅ **4a** Export: face-tracked crops, burned-in subtitles matching the preview, watermark, MP4/ZIP · ✅ **4b** filler-word and pause removal, auto-zoom, AI hook line, intro/outro
 5. Full editor: edit by transcript, frame-precise trims, subtitle designer, layout switcher
 6. Podcast modes: speaker detection, active-speaker/split/grid layouts, layout templates
 7. Gaming: facecam detection, gaming layouts, HUD safe zones, chat spikes

@@ -27,8 +27,11 @@ def probe(path: Path) -> dict:
     rotation = next((int(d.get("rotation", 0)) for d in (video or {}).get("side_data_list", []) if "rotation" in d), 0)
     if rotation % 180:  # phone videos: FFmpeg decodes them upright, so report the upright size
         w, h = h, w
+    num, _, den = (video or {}).get("avg_frame_rate", "0/0").partition("/")
+    fps = float(num) / float(den) if den and float(den) else 0.0
     return {
         "duration": float(info.get("format", {}).get("duration") or 0),
+        "fps": min(60.0, max(24.0, round(fps, 3))) if fps else 30.0,  # the export re-times to this constant rate
         "has_audio": any(s.get("codec_type") == "audio" for s in streams),
         "width": w,
         "height": h,

@@ -63,3 +63,12 @@ test('400 for a bad field, 404 for a missing clip', async () => {
   expect((await regen(id, 'nope')).status).toBe(400)
   expect((await regen(randomUUID(), 'titles')).status).toBe(404)
 })
+
+test('new titles bring a fresh hook line (emoji stripped: the burned-in fonts have none) and zoom words', async () => {
+  const { id } = await setup('google')
+  gen.mockResolvedValue({ output: { items: [{ ...meta.items[0], hook: 'She said   WHAT?! 😳🔥', keywords: ['what', 'date'] }] } })
+  const c = await (await regen(id, 'titles')).json()
+  expect(c).toMatchObject({ hook: 'She said WHAT?!', keywords: ['what', 'date'] })
+  gen.mockResolvedValue({ output: { items: [{ ...meta.items[0], hook: 'Other' }] } })
+  expect((await (await regen(id, 'hashtags')).json()).hook).toBe('She said WHAT?!') // only titles refresh it
+})

@@ -73,3 +73,24 @@ test('an SVG logo is stored with the PNG the browser rendered from it (FFmpeg ca
   expect((await up({ file: svg, png: new File(['not a png'], 'x.png') })).status).toBe(400)
   expect((await (await up({ file: svg })).json()).pngPath).toBeUndefined()
 })
+
+test('intro/outro upload takes real videos only and they are served back; brand kit only accepts uploaded paths', async () => {
+  const { POST } = await import('@/app/api/uploads/bumper/route')
+  const up = (bytes: Uint8Array<ArrayBuffer>, name: string) => {
+    const fd = new FormData(); fd.append('file', new File([bytes], name, { type: 'video/mp4' }))
+    return POST(new Request('http://x', { method: 'POST', body: fd }))
+  }
+  expect((await up(new TextEncoder().encode('not a video at all'), 'x.mp4')).status).toBe(400)
+  const mp4 = new Uint8Array([0, 0, 0, 0x18, ...new TextEncoder().encode('ftypisom'), 0, 0, 0, 0])
+  const res = await up(mp4, 'intro.mp4')
+  expect(res.status).toBe(200)
+  const { path } = await res.json()
+  expect(path).toMatch(/^bumpers\/[0-9a-f-]{36}\.mp4$/)
+  const { GET } = await import('@/app/api/files/[...path]/route')
+  const got = await GET(new Request('http://x'), { params: Promise.resolve({ path: path.split('/') }) })
+  expect(got.status).toBe(200)
+  expect(got.headers.get('content-type')).toBe('video/mp4')
+  const { getSetting, setSetting } = await import('@/lib/settings')
+  await setSetting('brandKit', { ...(await getSetting('brandKit')), introPath: path })
+  await expect(setSetting('brandKit', { ...(await getSetting('brandKit')), outroPath: '../clipforge.db' })).rejects.toThrow()
+})

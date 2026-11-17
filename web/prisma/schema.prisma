@@ -80,6 +80,8 @@ model Clip {
   source       String   @default("auto") // auto | search
   query        String?
   status       String   @default("new") // new | kept | deleted
+  hook         String? // on-screen hook line the AI wrote (shown over the first 3 s)
+  keywords     String? // string[]: words the AI picked for zoom punch-ins
   edit         String? // ClipEdit JSON (lib/clip-edit.ts): the editor's choices, used by export
   createdAt    DateTime @default(now())
 

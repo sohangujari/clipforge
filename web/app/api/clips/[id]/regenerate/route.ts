@@ -29,7 +29,9 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
     const item = (output as { items: Record<string, unknown>[] }).items[0]
     if (!item) return Response.json({ error: 'The model returned nothing — try again' }, { status: 502 })
     const f = body.data.field
-    await db.clip.update({ where: { id: clip.id }, data: { [COLUMN[f]]: JSON.stringify(item[f]) } })
+    const extra = f === 'titles' ? { // new titles come with a fresh hook line and zoom words
+      ...(typeof item.hook === 'string' && item.hook && { hook: item.hook }), ...(Array.isArray(item.keywords) && item.keywords.length && { keywords: JSON.stringify(item.keywords) }) } : {}
+    await db.clip.update({ where: { id: clip.id }, data: { [COLUMN[f]]: JSON.stringify(item[f]), ...extra } })
     return Response.json(await getClip(clip.id))
   } catch (e) {
     if (e instanceof LlmRunError) {

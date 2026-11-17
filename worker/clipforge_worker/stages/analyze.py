@@ -252,10 +252,11 @@ def insert_clips(ctx, chosen: list, source: str, query: str | None = None) -> No
         cid = str(uuid.uuid4())
         m = c["meta"]
         ctx.conn.execute(
-            "INSERT INTO Clip (id, projectId, startSec, endSec, score, breakdown, reason, tips, titles, descriptions, hashtags, signals, source, query, status, createdAt) "
-            "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?, 'new', ?)",
+            "INSERT INTO Clip (id, projectId, startSec, endSec, score, breakdown, reason, tips, titles, descriptions, hashtags, hook, keywords, signals, source, query, status, createdAt) "
+            "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?, 'new', ?)",
             (cid, pid, c["startSec"], c["endSec"], c["score"], json.dumps(c["breakdown"]), c["reason"][:300], json.dumps(c["tips"]),
-             json.dumps(list(m["titles"])), json.dumps(m["descriptions"]), json.dumps(m["hashtags"]), json.dumps(c["signals"]), source, query, now_iso()))
+             json.dumps(list(m["titles"])), json.dumps(m["descriptions"]), json.dumps(m["hashtags"]),
+             m.get("hook") or None, json.dumps(m["keywords"]) if m.get("keywords") else None, json.dumps(c["signals"]), source, query, now_iso()))
         ffmpeg(["-ss", f"{c['hookSec'] + 0.5:.2f}", "-i", str(md / "proxy.mp4"), "-frames:v", "1", "-vf", "scale=360:-2", "-q:v", "5"],
                md / "clips" / f"{cid}.jpg")  # best effort
 

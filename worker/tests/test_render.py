@@ -198,3 +198,37 @@ def test_edit_without_brand_uses_the_current_brand_kit(conn, data_dir, clips):
     px = subprocess.run(["ffmpeg", "-v", "error", "-ss", "1", "-i", str(data_dir / "renders" / f"{cid}-1080p.mp4"), "-vf", "crop=10:10:60:60", "-frames:v", "1",
                          "-f", "rawvideo", "-pix_fmt", "rgb24", "-"], capture_output=True, check=True).stdout
     assert px[0] > 200 and px[1] < 60  # today's Settings logo, though the clip was edited before
+
+
+def _durations(p: Path):
+    info = probe(p)
+    v = next(s for s in info["streams"] if s["codec_type"] == "video")
+    a = next(s for s in info["streams"] if s["codec_type"] == "audio")
+    return float(v["duration"]), float(a["duration"])
+
+
+def test_cuts_zoom_and_hook_render_with_sound_and_picture_in_step(conn, data_dir, clips):
+    pid = project(conn, data_dir, clips)
+    e = edit(keep=[[0.5, 1.5], [2.1, 3.0], [3.6, 4.5]], zooms=[[2.2, 3.2]], autoZoom=True, hook={"on": True, "text": "Watch this"})
+    cid = add_clip(conn, pid, e)
+    job = render(conn, pid, [cid])
+    assert job["status"] == "done", job["error"]
+    v, a = _durations(data_dir / "renders" / f"{cid}-1080p.mp4")
+    assert abs(v - 2.8) < 0.1 and abs(a - v) < 0.06  # 4 s trim minus 1.2 s of cuts; no drift between sound and picture
+
+
+def test_intro_and_outro_wrap_the_clip(conn, data_dir, clips):
+    pid = project(conn, data_dir, clips)
+    (data_dir / "bumpers").mkdir(exist_ok=True)
+    import shutil
+    shutil.copy(clips["no_audio"], data_dir / "bumpers" / "in.mp4")
+    brand = {"position": "br", "opacity": 80, "sizePct": 12, "marginPct": 4, "introPath": "bumpers/in.mp4", "outroPath": "bumpers/missing.mp4"}
+    cid = add_clip(conn, pid, edit(brand=brand, bumpers=True))
+    job = render(conn, pid, [cid])
+    assert job["status"] == "done", job["error"]
+    v, a = _durations(data_dir / "renders" / f"{cid}-1080p.mp4")
+    intro = float(probe(data_dir / "bumpers" / "in.mp4")["format"]["duration"])
+    assert abs(v - (4.0 + intro)) < 0.2 and abs(a - v) < 0.1  # missing outro file: skipped, not an error
+    off = add_clip(conn, pid, edit(brand=brand, bumpers=False))
+    assert render(conn, pid, [off])["status"] == "done"
+    assert abs(_durations(data_dir / "renders" / f"{off}-1080p.mp4")[0] - 4.0) < 0.15

@@ -87,3 +87,20 @@ test('a change made right before leaving the editor is still saved', async ({ pa
   await page.getByRole('button', { name: 'Subtitles', exact: true }).click()
   await expect(page.getByRole('button', { name: /Neon/ }).first()).toHaveAttribute('aria-pressed', 'true')
 })
+
+test('auto edits: on by default, and switching them off is saved with the clip', async ({ page }) => {
+  const id = editorUrl.split('/').pop()
+  await page.goto(editorUrl)
+  await page.getByRole('button', { name: 'AI', exact: true }).click()
+  for (const name of ['Remove filler words (um, uh)', 'Remove long pauses', 'Hook line at the start']) await expect(page.getByRole('switch', { name })).toBeChecked()
+  await expect(page.getByRole('textbox', { name: 'Hook text' })).not.toHaveValue('')
+  const edit = async () => (await (await page.request.get(`/api/clips/${id}`)).json()).edit
+  await page.getByRole('textbox', { name: 'Hook text' }).fill('Watch till the end')
+  await expect.poll(async () => (await edit())?.hook).toEqual({ on: true, text: 'Watch till the end' })
+  await page.getByRole('switch', { name: 'Remove filler words (um, uh)' }).click()
+  await page.getByRole('switch', { name: 'Remove long pauses' }).click()
+  await page.getByRole('switch', { name: 'Hook line at the start' }).click()
+  await expect.poll(async () => { const e = await edit(); return [e.hook.on, e.removePauses, e.keep] })
+    .toEqual([false, false, [[expect.any(Number), expect.any(Number)]]]) // nothing cut: the whole trim plays
+  await expect(page.getByTestId('timeline-cut')).toHaveCount(0)
+})

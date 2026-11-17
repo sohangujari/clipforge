@@ -2,16 +2,17 @@
 import { useEffect, useRef, type RefObject } from 'react'
 import type JASSUB from 'jassub'
 import { FALLBACK_FONT, FONT_FILES } from '@/lib/ass'
+import { toOut, type Range } from '@/lib/cuts'
 
 /**
  * Draws the clip's ASS with JASSUB (libass in WebAssembly) — the same library and font files FFmpeg uses for the export,
  * so what you see here is what gets burned in. Canvas mode: the canvas covers the crop frame, not the (scaled) video.
  */
-export function AssOverlay({ ass, videoRef, offset }: { ass: string; videoRef: RefObject<HTMLVideoElement | null>; offset: number }) {
+export function AssOverlay({ ass, videoRef, keep }: { ass: string; videoRef: RefObject<HTMLVideoElement | null>; keep: Range[] }) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const inst = useRef<JASSUB | null>(null) // set only once JASSUB is ready
-  const live = useRef({ ass, offset })
-  useEffect(() => { live.current = { ass, offset } })
+  const live = useRef({ ass, keep })
+  useEffect(() => { live.current = { ass, keep } })
 
   const size = () => {
     const c = canvasRef.current!, dpr = Math.min(2, window.devicePixelRatio || 1)
@@ -20,7 +21,7 @@ export function AssOverlay({ ass, videoRef, offset }: { ass: string; videoRef: R
   const render = () => {
     const j = inst.current, v = videoRef.current
     if (!j || !v || !canvasRef.current?.clientWidth) return
-    j.manualRender({ expectedDisplayTime: performance.now(), ...size(), mediaTime: Math.max(0, v.currentTime - live.current.offset) }, true).catch(() => {})
+    j.manualRender({ expectedDisplayTime: performance.now(), ...size(), mediaTime: toOut(live.current.keep, v.currentTime) /* the ASS runs on the cut clip's clock */ }, true).catch(() => {})
   }
 
   useEffect(() => {
