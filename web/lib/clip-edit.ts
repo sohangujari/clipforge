@@ -4,13 +4,18 @@ import type { EditorState } from './editor'
 import { BrandKitObject } from './brand-kit'
 import { SubtitleStyleSchema } from './subtitle-presets'
 import { keepRanges, zoomRanges, type Range as Span } from './cuts'
+import { DEFAULT_PIP, GAMING_LAYOUTS } from './gaming'
 
-const RENDERABLE = ['single', 'wide-blur', 'active-speaker', 'split', 'grid'] as const
+export const RENDERABLE = ['single', 'wide-blur', 'active-speaker', 'split', 'grid', ...GAMING_LAYOUTS] as const
 const Range = z.tuple([z.number(), z.number()])
+const unit = z.number().min(0).max(1)
+export const BoxSchema = z.object({ x: unit, y: unit, w: z.number().min(0.02).max(1), h: z.number().min(0.02).max(1) })
+export const HudSchema = z.object({ preset: z.string().max(20).nullable(), zones: z.array(BoxSchema).max(20) })
+export const PipSchema = z.object({ x: unit, y: unit, size: z.number().min(0.15).max(0.6), shape: z.enum(['circle', 'rounded']) })
 
 export const ClipEditSchema = z.object({
   aspect: z.enum(['9:16', '1:1', '16:9']),
-  layoutId: z.enum(RENDERABLE), // facecam layouts: Phase 7
+  layoutId: z.enum(RENDERABLE),
   style: SubtitleStyleSchema,
   subtitlesOn: z.boolean(),
   watermarkOn: z.boolean(),
@@ -28,6 +33,11 @@ export const ClipEditSchema = z.object({
   cuts: z.array(Range).max(500).default([]),
   focus: z.array(z.tuple([z.number(), z.number(), z.number().min(0).max(1), z.number().min(0).max(1)])).max(500).default([]),
   speakerColors: z.boolean().default(false),
+  // Phase 7: gaming layouts (lib/gaming.ts)
+  facecam: BoxSchema.nullable().default(null),
+  game: z.tuple([unit, unit]).default([0.5, 0.5]),
+  pip: PipSchema.default(DEFAULT_PIP),
+  hud: HudSchema.default({ preset: null, zones: [] }),
   keep: z.array(Range).max(2000).optional(),  // worked out from the switches above (lib/cuts.ts): what the export plays…
   zooms: z.array(Range).max(500).optional(),  // …and where it punches in
 })
@@ -47,5 +57,5 @@ export const toEdit = (s: EditorState, settingsBrand: EditorState['brand'] | und
   aspect: s.aspect, layoutId: (RENDERABLE as readonly string[]).includes(s.layoutId) ? s.layoutId as ClipEdit['layoutId'] : 'single',
   style: s.style, subtitlesOn: s.subtitlesOn, watermarkOn: s.watermarkOn, trim: s.trim, resolution: s.resolution,
   removeFillers: s.removeFillers, removePauses: s.removePauses, autoZoom: s.autoZoom, hook: s.hook, bumpers: s.bumpers, ...derive(s, m),
-  cuts: s.cuts, focus: s.focus, speakerColors: s.speakerColors, words: s.words,
+  cuts: s.cuts, focus: s.focus, speakerColors: s.speakerColors, words: s.words, facecam: s.facecam, game: s.game, pip: s.pip, hud: s.hud,
   ...(JSON.stringify(s.brand) !== JSON.stringify(settingsBrand) && { brand: s.brand }) })

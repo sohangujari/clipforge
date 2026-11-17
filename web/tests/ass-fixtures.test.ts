@@ -7,6 +7,7 @@ import { buildAss, type AssInput } from '@/lib/ass'
 import { keepRanges, middleRanges, retimeWords, zoomAt, zoomRanges, type Range } from '@/lib/cuts'
 import { builtinPresets } from '@/lib/subtitle-presets'
 import { applyFocus, minusFocus, type Focus, type Keyframe } from '@/lib/reframe'
+import { GAMING_LAYOUTS, regions, type GameOpts } from '@/lib/gaming'
 
 const OUT = join(__dirname, '..', '..', 'shared', 'ass-fixtures')
 const sample = ['So', 'we', 'set', 'up', 'blind', 'dates', '{really}'].map((w, i) => ({ w, s: i * 0.45 + (i > 3 ? 0.8 : 0), e: i * 0.45 + 0.4 + (i > 3 ? 0.8 : 0) }))
@@ -35,7 +36,15 @@ const keep = keepRanges({ start: 9.5, end: 17.5 }, talk, silences, { fillers: tr
 const zooms = zoomRanges(talk, keep, ['blind dates'])
 const kf: Keyframe[] = [[0, 0.3, 0.5], [4, 0.35, 0.45], [5.999, 0.35, 0.45], [6, 0.7, 0.4], [12, 0.6, 0.4]]
 const focus: Focus[] = [[6, 9, 0.5, 0.42], [9, 10, 0.2, 0.6], [2, 3, 0.9, 0.5]]
-export const cutsFixture = { words: talk, keep, retimed: retimeWords(talk, keep), zooms,
+const cam = { x: 0.013, y: 0.6871, w: 0.2473, h: 0.3129 }
+const gameOpts: GameOpts[] = [
+  { facecam: cam, game: [0.5, 0.5], pip: { x: 0.76, y: 0.15, size: 0.36, shape: 'circle' } },
+  { facecam: cam, game: [0.12, 0.9], pip: { x: 0.03, y: 0.97, size: 0.413, shape: 'rounded' } },
+  { facecam: null, game: [0.7, 0.3], pip: { x: 0.5, y: 0.5, size: 0.3, shape: 'circle' } },
+]
+const gaming = GAMING_LAYOUTS.flatMap((layout) => gameOpts.flatMap((o) => ([[1920, 1080, 1080, 1920], [854, 480, 720, 1280], [1280, 720, 1080, 1080], [1920, 1080, 1920, 1080]] as const)
+  .map(([sw, sh, W, H]) => ({ layout, o, src: [sw, sh], out: [W, H], regions: regions(layout, o, sw, sh, W, H) }))))
+export const cutsFixture = { gaming, words: talk, keep, retimed: retimeWords(talk, keep), zooms,
   focus: { kf, focus, out: applyFocus(kf, focus), wide: [[1, 2.5], [7, 11], [20, 21]], wideOut: minusFocus([[1, 2.5], [7, 11], [20, 21]], focus) },
   retimedSpeakers: retimeWords(talk.map((w, i) => ({ ...w, speaker: i % 2 })), keep),
   middle: middleRanges([[9, 12, 2], [13.2, 14.9, 3], [16, 30, 2]], keep, true),

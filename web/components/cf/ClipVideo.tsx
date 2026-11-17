@@ -1,7 +1,8 @@
 'use client'
 import { useEffect, useRef, type RefObject } from 'react'
 import { ASPECT_RATIO, type Aspect } from '@/lib/editor'
-import { centerAt, cropRect, rowScale, type Keyframe } from '@/lib/reframe'
+import { centerAt, cropRect, outputSize, rowScale, type Keyframe } from '@/lib/reframe'
+import { isGaming, regions, ROUND_R, type GameOpts, type GamingLayout } from '@/lib/gaming'
 import type { RowPlan } from '@/lib/people'
 import { zoomAt, type Range } from '@/lib/cuts'
 
@@ -16,23 +17,25 @@ export function nextPlayable(keep: Range[], t: number): number {
 
 const NONE: Range[] = []
 
-export type RealLayout = 'single' | 'wide-blur' | 'active-speaker' | 'split' | 'grid'
+export type RealLayout = 'single' | 'wide-blur' | 'active-speaker' | 'split' | 'grid' | GamingLayout
 export type Rows = { plan: RowPlan; faceH: number | null }
 
 /**
  * The proxy video inside the editor frame, cropped the way the export will crop it (same track, same maths).
  * The crop is applied straight to the element every frame (no React re-render); onTime reports ~15×/s for the timeline.
  */
-export function ClipVideo({ src, track, aspect, layout, keep, zooms, rows, wide = NONE, t, playing, onTime, videoRef }: {
+export function ClipVideo({ src, track, aspect, layout, keep, zooms, rows, wide = NONE, gaming = null, t, playing, onTime, videoRef }: {
   src: string; track: Keyframe[]; aspect: Aspect; layout: RealLayout; keep: Range[]; zooms: Range[]; rows?: Rows | null
   /** shots with no face found: shown whole over a blurred fill, as the export does */
   wide?: Range[]
+  /** gaming layouts: facecam box, gameplay centre, PiP bubble (lib/gaming.ts — the same regions the export overlays) */
+  gaming?: GameOpts | null
   t: number; playing: boolean; onTime: (t: number) => void; videoRef: RefObject<HTMLVideoElement | null>
 }) {
   const blurRef = useRef<HTMLCanvasElement>(null)
   const rowsRef = useRef<HTMLCanvasElement>(null)
-  const live = useRef({ track, aspect, layout, keep, zooms, rows, wide, onTime })
-  useEffect(() => { live.current = { track, aspect, layout, keep, zooms, rows, wide, onTime } })
+  const live = useRef({ track, aspect, layout, keep, zooms, rows, wide, gaming, onTime })
+  useEffect(() => { live.current = { track, aspect, layout, keep, zooms, rows, wide, gaming, onTime } })
 
   /** Split/Grid while 2–3 people are on screen: each person's crop drawn into a row (a column at 16:9), as the export's
    * vstack does; the talker's row outlined in Grid. Returns false when the single crop should show instead. */
@@ -58,11 +61,34 @@ export function ClipVideo({ src, track, aspect, layout, keep, zooms, rows, wide 
     return true
   }
 
+  /** Gaming layouts: each region's crop drawn into its place (the PiP bubble clipped to its shape), as the export overlays them. */
+  const drawGaming = (v: HTMLVideoElement): boolean => {
+    const { layout: l, aspect: a, gaming: o } = live.current, c = rowsRef.current
+    if (!isGaming(l) || !o || !c) return false
+    const dpr = Math.min(2, window.devicePixelRatio || 1), cw = Math.round(c.clientWidth * dpr), ch = Math.round(c.clientHeight * dpr)
+    if (c.width !== cw || c.height !== ch) { c.width = cw; c.height = ch }
+    const { w: W, h: H } = outputSize(a, '1080p'), k = cw / W, g = c.getContext('2d')!
+    g.fillStyle = '#000'; g.fillRect(0, 0, cw, ch)
+    for (const r of regions(l, o, v.videoWidth, v.videoHeight, W, H)) {
+      const [sx, sy, sw, sh] = r.src, [dx, dy, dw, dh] = r.dst.map((n) => n * k)
+      g.save()
+      if (r.shape !== 'rect') {
+        g.beginPath()
+        if (r.shape === 'circle') g.arc(dx + dw / 2, dy + dh / 2, dw / 2, 0, Math.PI * 2)
+        else g.roundRect(dx, dy, dw, dh, Math.floor(Math.min(r.dst[2], r.dst[3]) * ROUND_R + 0.5) * k)
+        g.clip()
+      }
+      g.drawImage(v, sx, sy, sw, sh, dx, dy, dw, dh)
+      g.restore()
+    }
+    return true
+  }
+
   const apply = () => {
     const v = videoRef.current
     if (!v || !v.videoWidth) return
     const { track: k, aspect: a, layout: l, zooms: zs } = live.current
-    const rowsOn = (l === 'split' || l === 'grid') && drawRows(v)
+    const rowsOn = ((l === 'split' || l === 'grid') && drawRows(v)) || drawGaming(v)
     v.style.visibility = rowsOn ? 'hidden' : '' // still plays the sound and drives the clock
     if (rowsRef.current) rowsRef.current.style.display = rowsOn ? '' : 'none'
     if (rowsOn) return
@@ -108,13 +134,13 @@ export function ClipVideo({ src, track, aspect, layout, keep, zooms, rows, wide 
     if (v && !playing && Math.abs(v.currentTime - t) > 0.04) v.currentTime = t
   }, [t, playing, videoRef])
 
-  useEffect(apply, [aspect, layout, track, zooms, rows]) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(apply, [aspect, layout, track, zooms, rows, gaming]) // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <>
       <canvas ref={blurRef} data-testid="clip-video-blur" width={48} height={86} aria-hidden style={{ display: layout === 'wide-blur' ? undefined : 'none' }}
         className="absolute inset-0 size-full scale-125 object-cover opacity-80 blur-xl" />
-      {(layout === 'split' || layout === 'grid') && <canvas ref={rowsRef} data-testid="clip-video-rows" aria-hidden className="absolute inset-0 size-full" />}
+      {(layout === 'split' || layout === 'grid' || isGaming(layout)) && <canvas ref={rowsRef} data-testid="clip-video-rows" aria-hidden className="absolute inset-0 size-full" />}
       <video ref={videoRef} data-testid="clip-video" src={src} muted={false} playsInline preload="auto" className="absolute max-w-none"
         onLoadedMetadata={(e) => { e.currentTarget.currentTime = t; apply() }} onSeeked={apply} />
     </>

@@ -57,7 +57,7 @@ def test_search_no_match_warns_and_creates_nothing(conn, data_dir, clips, monkey
 def test_analyze_job_reruns_only_the_analysis_stages():
     job = db.Job("j", "p", "queued", None, [], 0.0, "analyze", {})
     assert list(stages_for(job)) == ["signals", "faces", "speakers", "analyzing"]
-    assert list(stages_for(db.Job("j", "p", "queued", None, [], 0.0, "ingest", {})))[:2] == ["importing", "preparing"]
+    assert list(stages_for(db.Job("j", "p", "queued", None, [], 0.0, "ingest", {})))[:3] == ["importing", "chat", "preparing"]
 
 
 def test_failed_search_job_leaves_project_ready(conn, data_dir, clips, monkeypatch):

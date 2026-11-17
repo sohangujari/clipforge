@@ -1,6 +1,6 @@
 import 'server-only'
 import { randomUUID } from 'node:crypto'
-import { existsSync, rmSync } from 'node:fs'
+import { existsSync, mkdirSync, renameSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { z } from 'zod'
 import { getDb } from './db'
@@ -30,6 +30,8 @@ export interface ProjectView {
   message?: string; error?: string; warning?: string; durationSec?: number; language?: string
   contentType: string; thumbnailUrl?: string; createdAt: string; hasTranscript: boolean; captionScript: string; clipCount: number; jobType: string
   speakers?: Speaker[]
+  /** "twitch:<login>" etc. for links (Phase 7); hasChat: stream chat downloaded or imported */
+  channel?: string; hasChat: boolean
 }
 
 const mediaDir = (id: string) => join(/*turbopackIgnore: true*/ dataDir(), 'media', id)
@@ -55,6 +57,8 @@ function toView(p: NonNullable<Row>): ProjectView {
     clipCount: p._count.clips,
     jobType: job?.type ?? 'ingest',
     speakers: p.speakers ? JSON.parse(p.speakers) : undefined,
+    channel: p.channel ?? undefined,
+    hasChat: ['chat.json', 'chat-import'].some((f) => existsSync(join(/*turbopackIgnore: true*/ dir, f))),
   }
 }
 
@@ -161,6 +165,24 @@ export function searchProject(id: string, query: string): Promise<ProjectView> {
 export const isTerminal = (projectStatus: string) => ['ready', 'failed', 'cancelled'].includes(projectStatus)
 
 /** Route helper: ProjectError → JSON response with its status. */
+export const MAX_CHAT_BYTES = 100 * 1024 * 1024
+const CHAT_LIKE = /^\s*[{\[]|^\s*\[?(\d+:)?\d{1,2}:\d{2}/m
+
+/** A stream's chat log (TwitchDownloader JSON, YouTube live_chat.json, or "[0:01:23] name: text" lines), saved for the
+ * worker to read on the next Find clips (worker/clipforge_worker/chat.py). */
+export async function importChat(id: string, body: ArrayBuffer): Promise<ProjectView> {
+  const row = await mustLoad(id)
+  if (!body.byteLength) throw new ProjectError(400, 'The chat file is empty')
+  if (body.byteLength > MAX_CHAT_BYTES) throw new ProjectError(413, 'Chat files up to 100 MB are supported')
+  if (!CHAT_LIKE.test(new TextDecoder().decode(body.slice(0, 64 * 1024)))) throw new ProjectError(400, "That doesn't look like a chat log — use a TwitchDownloader JSON, a YouTube live_chat.json or a text log")
+  const dir = mediaDir(id)
+  mkdirSync(dir, { recursive: true })
+  writeFileSync(join(/*turbopackIgnore: true*/ dir, 'chat-import.tmp'), Buffer.from(body))
+  renameSync(join(/*turbopackIgnore: true*/ dir, 'chat-import.tmp'), join(/*turbopackIgnore: true*/ dir, 'chat-import'))
+  rmSync(join(/*turbopackIgnore: true*/ dir, 'chat.none'), { force: true })
+  return toView(row)
+}
+
 export async function handle<T>(fn: () => Promise<T>, okStatus = 200): Promise<Response> {
   try {
     const v = await fn()

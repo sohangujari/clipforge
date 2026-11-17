@@ -15,10 +15,10 @@ os.environ.setdefault("HF_HUB_DISABLE_XET", "1")
 from . import db  # noqa: E402
 from .paths import data_dir  # noqa: E402
 from .runner import run_job  # noqa: E402
-from . import signals  # noqa: E402
+from . import chat, signals  # noqa: E402
 from .stages import analyze, faces, importer, prepare, render, romanize, search, speakers, transcribe  # noqa: E402
 
-STAGES = {"importing": importer.run, "preparing": prepare.run, "transcribing": transcribe.run, "romanizing": romanize.run,
+STAGES = {"importing": importer.run, "chat": chat.run, "preparing": prepare.run, "transcribing": transcribe.run, "romanizing": romanize.run,
           "signals": signals.run, "faces": faces.run, "speakers": speakers.run, "analyzing": analyze.run}
 
 

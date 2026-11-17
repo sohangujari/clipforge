@@ -1,7 +1,7 @@
 'use client'
 import { useCallback, useEffect, useState } from 'react'
 import Link from 'next/link'
-import { Film, Loader2, RefreshCw, Search, Settings, TriangleAlert } from 'lucide-react'
+import { Film, Loader2, MessageSquare, RefreshCw, Search, Settings, TriangleAlert } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { ExportButton } from './ExportButton'
@@ -64,6 +64,15 @@ export function RealClips({ initial }: { initial: ProjectView }) {
     setClips((cs) => cs!.map((x) => (x.id === c.id ? j : x)))
   }
 
+  const importChat = async (f: File | undefined) => {
+    if (!f) return
+    const res = await fetch(`/api/projects/${p.id}/chat`, { method: 'POST', body: f })
+    const j = await res.json()
+    if (!res.ok) return toast.error(j.error ?? "Couldn't add the chat")
+    setP(j)
+    toast.success('Chat added — Find clips again to use chat spikes')
+  }
+
   const label = p.jobType === 'search' ? 'Searching' : 'Finding clips'
   return (
     <div className="flex flex-col gap-5">
@@ -77,6 +86,14 @@ export function RealClips({ initial }: { initial: ProjectView }) {
           <Button type="submit" disabled={running || query.trim().length < 3}>Search</Button>
         </form>
         <Button variant="secondary" disabled={running} onClick={() => start('analyze')}><RefreshCw /> Find clips again</Button>
+        <Button variant="ghost" asChild disabled={running}
+          title={p.hasChat ? 'This stream’s chat is used to find clips. Import another log to replace it.' : 'Import the stream’s chat log (TwitchDownloader JSON, YouTube live_chat.json or a text log) to find the moments chat went wild'}>
+          <label className="cursor-pointer">
+            <MessageSquare /> {p.hasChat ? 'Chat ✓' : 'Import chat'}
+            <input type="file" data-testid="chat-file" accept=".json,.txt,.log,.jsonl" className="sr-only" disabled={running}
+              onChange={(e) => { importChat(e.target.files?.[0]); e.target.value = '' }} />
+          </label>
+        </Button>
         {!!clips?.length && <ExportButton projectId={p.id} resolution="1080p" zip variant="secondary" />}
       </div>
 

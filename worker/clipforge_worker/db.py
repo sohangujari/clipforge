@@ -129,7 +129,7 @@ def get_project(conn, project_id: str) -> dict:
     return p
 
 
-PROJECT_FIELDS = {"title", "sourceFile", "durationSec", "language", "warning", "contentType"}
+PROJECT_FIELDS = {"title", "sourceFile", "durationSec", "language", "warning", "contentType", "channel"}
 
 
 def update_project(conn, project_id: str, **fields) -> None:

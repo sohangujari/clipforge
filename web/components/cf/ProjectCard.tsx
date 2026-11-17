@@ -19,7 +19,7 @@ const STATUS: Record<string, { label: string; cls: string }> = {
   failed: { label: 'Failed', cls: 'bg-cf-accent/15 text-cf-accent' },
   cancelled: { label: 'Cancelled', cls: 'bg-zinc-500/15 text-zinc-600 dark:text-zinc-400' },
 }
-const STAGE_LABEL: Record<string, string> = { importing: 'Importing', preparing: 'Preparing', transcribing: 'Transcribing', romanizing: 'Hinglish', signals: 'Listening', analyzing: 'Finding clips', searching: 'Searching' }
+const STAGE_LABEL: Record<string, string> = { importing: 'Importing', chat: 'Chat', preparing: 'Preparing', transcribing: 'Transcribing', romanizing: 'Hinglish', signals: 'Listening', analyzing: 'Finding clips', searching: 'Searching' }
 
 export function ProjectCard({ p, onDelete }: { p: CardData; onDelete?: () => void }) {
   const [confirm, setConfirm] = useState(false)

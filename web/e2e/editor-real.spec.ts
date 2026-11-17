@@ -147,3 +147,35 @@ test('transcript editing: cut words out, fix a word, trim to a selection; frame 
   expect(clip.edit.keep.length).toBeGreaterThan(1)
   expect(await inClip.count()).toBeGreaterThan(0)
 })
+
+test('gaming layouts: draw the facecam, move the PiP bubble, pick a game HUD; all saved with the clip', async ({ page }) => {
+  await page.goto(editorUrl)
+  const clipId = editorUrl.split('/').pop()!
+  await page.getByRole('button', { name: 'Layout', exact: true }).click()
+  await page.locator('[data-layout=facecam-top]').click()
+  await expect(frame(page).getByTestId('clip-video-rows')).toBeVisible() // the stacked layout is drawn on a canvas
+  const picker = page.getByTestId('picker-facecam')
+  await picker.scrollIntoViewIfNeeded()
+  const b = (await picker.boundingBox())!
+  await page.mouse.move(b.x + b.width * 0.6, b.y + b.height * 0.6)
+  await page.mouse.down()
+  await page.mouse.move(b.x + b.width * 0.95, b.y + b.height * 0.95, { steps: 5 })
+  await page.mouse.up()
+  await page.locator('[data-layout=pip]').click()
+  await page.getByRole('radio', { name: 'Rounded' }).click()
+  await page.getByRole('button', { name: 'Minecraft' }).click()
+  await expect(page.getByRole('button', { name: 'Minecraft' })).toHaveAttribute('aria-pressed', 'true')
+  await expect(frame(page).getByTestId('hud-zone').first()).toBeVisible()
+  await expect.poll(async () => (await (await page.request.get(`/api/clips/${clipId}`)).json()).edit, { timeout: 5000 }).toMatchObject({
+    layoutId: 'pip', pip: { shape: 'rounded' }, hud: { preset: 'minecraft' }, facecam: { x: expect.closeTo(0.6, 1), w: expect.closeTo(0.35, 1) } })
+  // remembered for this video (an upload: no channel)
+  const cams = await (await page.request.get('/api/settings/facecams')).json()
+  expect(Object.keys(cams).some((k) => k.startsWith('project:'))).toBe(true)
+})
+
+test('a stream chat log can be imported on the clips page', async ({ page }) => {
+  const pid = editorUrl.split('/')[2]
+  await page.goto(`/projects/${pid}/clips`)
+  await page.getByTestId('chat-file').setInputFiles({ name: 'chat.txt', mimeType: 'text/plain', buffer: Buffer.from('[0:00:03] amy: KEKW\n[0:00:04] bob: LUL\n') })
+  await expect(page.getByText('Chat ✓')).toBeVisible()
+})

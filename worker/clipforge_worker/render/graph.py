@@ -3,6 +3,7 @@ Crop maths = clips/reframe.py, the same as the editor preview (web/lib/reframe.t
 import re
 from pathlib import Path
 
+from ..clips.gaming import GAMING_LAYOUTS, ROUND_R, regions
 from ..clips.reframe import center_at, crop_rect, row_scale
 from .cuts import zoom_expr
 
@@ -95,6 +96,36 @@ def _rows(F: str, W: int, H: int, edit: dict, keyframes, rows: dict, start: floa
     return ";".join(parts)
 
 
+def _mask(shape: str, w: int, h: int) -> str:
+    """Alpha for the PiP bubble: a circle, or a rectangle with rounded corners (the preview clips the same shape)."""
+    if shape == "circle":
+        return f"if(lte(hypot(X-{w / 2},Y-{h / 2}),{w / 2}),255,0)"
+    r = int(min(w, h) * ROUND_R + 0.5)
+    dx, dy = f"max(abs(X-{w / 2})-{w / 2 - r},0)", f"max(abs(Y-{h / 2})-{h / 2 - r},0)"
+    return f"if(lte(hypot({dx},{dy}),{r}),255,0)"
+
+
+def _gaming(F: str, W: int, H: int, edit: dict, src_w: int, src_h: int) -> str:
+    """Facecam top/bottom, PiP, gameplay only, reaction stack: each region's crop, scaled into place (clips/gaming.py)."""
+    rs = regions(edit["layoutId"], {"facecam": edit.get("facecam"), "game": edit.get("game"), "pip": edit.get("pip")}, src_w, src_h, W, H)
+    parts = [f"[0:v]fps={F},split={len(rs)}" + "".join(f"[g{i}]" for i in range(len(rs))) if len(rs) > 1 else f"[0:v]fps={F}[g0]"]
+    for i, r in enumerate(rs):
+        (sx, sy, sw, sh), (dx, dy, dw, dh) = r["src"], r["dst"]
+        chain = f"[g{i}]crop={sw}:{sh}:{sx}:{sy},scale={dw}:{dh},setsar=1"
+        if r["shape"] != "rect":
+            chain += f",format=rgba,geq=r='r(X,Y)':g='g(X,Y)':b='b(X,Y)':a='{_mask(r['shape'], dw, dh)}'"
+        parts.append(chain + f"[p{i}]")
+    cur = "p0"
+    if rs[0]["dst"] != [0, 0, W, H]:
+        parts.append(f"[p0]pad={W}:{H}:{rs[0]['dst'][0]}:{rs[0]['dst'][1]}:black[b0]")
+        cur = "b0"
+    for i, r in enumerate(rs[1:], 1):
+        parts.append(f"[{cur}][p{i}]overlay={r['dst'][0]}:{r['dst'][1]}:format=auto[b{i}]")
+        cur = f"b{i}"
+    parts.append(f"[{cur}]format=yuv420p,setsar=1[v0]")
+    return ";".join(parts)
+
+
 def build_command(src: Path, out_name: str, edit: dict, keyframes, src_w: int, src_h: int, start: float, end: float,
                   logo: Path | None, ass_name: str, encoder: str, keep=None, zooms=(), fps: float = 30.0, has_audio: bool = True,
                   bumpers=(), rows: dict | None = None, wide=()) -> list[str]:
@@ -105,6 +136,8 @@ def build_command(src: Path, out_name: str, edit: dict, keyframes, src_w: int, s
     dur = end - start
     F = _fmt(fps)
     video = _rows(F, W, H, edit, keyframes, rows, start, dur, src_w, src_h) if rows and edit["layoutId"] in ("split", "grid") else None
+    if edit["layoutId"] in GAMING_LAYOUTS:
+        video = _gaming(F, W, H, edit, src_w, src_h)
     if not video and edit["layoutId"] == "wide-blur":
         video = (f"[0:v]fps={F},split[a][b];[a]scale={W}:{H}:force_original_aspect_ratio=increase,crop={W}:{H},boxblur=20:2,eq=brightness=-0.12[bg];"
                  f"[b]scale={W}:{H}:force_original_aspect_ratio=decrease[fg];[bg][fg]overlay=(W-w)/2:(H-h)/2,setsar=1[v0]")
@@ -112,7 +145,7 @@ def build_command(src: Path, out_name: str, edit: dict, keyframes, src_w: int, s
         a = ASPECT[edit["aspect"]]
         zoom = (f",zoompan=z='{zoom_expr(zooms)}':x='iw/2-iw/zoom/2':y='ih/2-ih/zoom/2':d=1:s={W}x{H}:fps={F},setsar=1" if zooms else "")
         video = f"[0:v]fps={F},{_crop(keyframes, start, dur, src_w, src_h, a)},scale={W}:{H},setsar=1{zoom}[v0]"
-    wide = in_clip(wide, start, dur) if edit["layoutId"] != "wide-blur" else []
+    wide = in_clip(wide, start, dur) if edit["layoutId"] not in ("wide-blur", *GAMING_LAYOUTS) else []
     if wide:  # shots with no face found (people too small): the whole frame over a blurred fill, not a crop that cuts them off
         en = "+".join(f"between(t,{_fmt(a)},{_fmt(b)})" for a, b in wide)
         video = (f"[0:v]split[vin][wsrc];" + video.replace("[0:v]", "[vin]", 1)[: -len("[v0]")] + "[vcrop];"

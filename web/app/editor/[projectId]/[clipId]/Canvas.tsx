@@ -10,6 +10,7 @@ const NO_ZOOM: Range[] = []
 import { applyFocus, centerAt, cropRect, minusFocus, outputSize, type Keyframe } from '@/lib/reframe'
 import { ASPECT_RATIO, chunkAt, withFocus, type EditorState, type SafeZone } from '@/lib/editor'
 import { LAYOUTS, type ThumbRect } from '@/lib/layouts'
+import { blockedRects, isGaming, regions, type GameOpts } from '@/lib/gaming'
 import { positionStyle } from '@/components/cf/PositionGrid'
 import { SubtitleLine } from '@/components/cf/SubtitleLine'
 import { cn } from '@/lib/utils'
@@ -39,7 +40,9 @@ function Region({ r, thumbnail }: { r: ThumbRect; thumbnail: string }) {
 }
 
 export interface RealMedia { src: string; track: Keyframe[]; playing: boolean; onTime: (t: number) => void; videoRef: RefObject<HTMLVideoElement | null>; keep: Range[]; zooms: Range[]; people: People | null; wide: Range[]
-  speakerColors: string[]; shotAt: (t: number) => [number, number]; onFocus: (shot: [number, number], x: number, y: number) => void }
+  speakerColors: string[]; shotAt: (t: number) => [number, number]; onFocus: (shot: [number, number], x: number, y: number) => void
+  /** gaming layouts: drag the gameplay to move its crop, or the PiP bubble to move it; showHud: outline the HUD zones */
+  onGame: (patch: Partial<Pick<EditorState, 'game' | 'pip'>>) => void; showHud: boolean }
 
 export const HOOK_S = 3 // the hook line shows over the first seconds (worker/clipforge_worker/stages/render.py)
 
@@ -105,19 +108,62 @@ export function CanvasFrame({ state, t, thumbnail, className, testIds = true, re
     drag.current = null
     setLive(null)
   }
+
+  // Gaming layouts: drag the gameplay to move its crop for the whole clip; drag the PiP bubble to move it.
+  const gaming = real && isGaming(state.layoutId)
+  const gdrag = useRef<{ x0: number; y0: number; mode: 'game' | 'pip'; game: [number, number]; pip: GameOpts['pip']; kx: number; ky: number; fw: number; fh: number } | null>(null)
+  const [gLive, setGLive] = useState<Partial<GameOpts> | null>(null)
+  const opts: GameOpts | null = useMemo(() => (gaming ? { facecam: state.facecam, game: state.game, pip: state.pip, ...gLive } : null), [gaming, state.facecam, state.game, state.pip, gLive])
+  const out = outputSize(state.aspect, '1080p')
+  const vdims = () => { const v = real?.videoRef.current; return [v?.videoWidth || 1920, v?.videoHeight || 1080] as const }
+  const gdown = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (!opts || e.button !== 0) return
+    const [vw, vh] = vdims(), rs = regions(state.layoutId as never, opts, vw, vh, out.w, out.h)
+    const b = e.currentTarget.getBoundingClientRect(), px = ((e.clientX - b.left) / b.width) * out.w, py = ((e.clientY - b.top) / b.height) * out.h
+    const hit = [...rs].reverse().find((r) => px >= r.dst[0] && px < r.dst[0] + r.dst[2] && py >= r.dst[1] && py < r.dst[1] + r.dst[3])
+    if (!hit) return
+    const mode = state.layoutId === 'pip' && hit.kind === 'face' ? 'pip' : hit.kind === 'game' ? 'game' : null
+    if (!mode) return
+    // screen px → fraction of the source (gameplay) or of the frame (bubble)
+    gdrag.current = { x0: e.clientX, y0: e.clientY, mode, game: state.game, pip: state.pip, fw: b.width, fh: b.height,
+      kx: hit.src[2] / (hit.dst[2] * b.width / out.w) / vw, ky: hit.src[3] / (hit.dst[3] * b.height / out.h) / vh }
+    e.currentTarget.setPointerCapture(e.pointerId)
+  }
+  const gmove = (e: React.PointerEvent) => {
+    const d = gdrag.current
+    if (!d) return
+    const dx = e.clientX - d.x0, dy = e.clientY - d.y0, c = (n: number) => Math.round(Math.min(1, Math.max(0, n)) * 10000) / 10000
+    if (d.mode === 'game') setGLive({ game: [c(d.game[0] - dx * d.kx), c(d.game[1] - dy * d.ky)] })
+    else setGLive({ pip: { ...d.pip, x: c(d.pip.x + dx / d.fw), y: c(d.pip.y + dy / d.fh) } })
+  }
+  const gup = () => {
+    if (gLive) real?.onGame(gLive)
+    gdrag.current = null
+    setGLive(null)
+  }
+  const hud = gaming && real.showHud && opts && state.hud.zones.length
+    ? blockedRects(regions(state.layoutId as never, opts, ...vdims(), out.w, out.h).filter((r) => r.kind === 'game'), state.hud.zones, ...vdims()) : []
   return (
     <div data-testid={testIds ? 'canvas-frame' : undefined} className={cn('relative overflow-hidden rounded-xl bg-black shadow-cf [container-type:inline-size]', className)}
       style={{ aspectRatio: ASPECT_RATIO[state.aspect] }}>
       {real ? (
         <>
           <ClipVideo src={real.src} track={track!} aspect={state.aspect} layout={state.layoutId as RealLayout}
-            keep={real.keep} zooms={zoomable ? real.zooms : NO_ZOOM} rows={rowsFor(state, real.people)} wide={wide}
+            keep={real.keep} zooms={zoomable ? real.zooms : NO_ZOOM} rows={rowsFor(state, real.people)} wide={wide} gaming={opts}
             t={t} playing={real.playing} onTime={real.onTime} videoRef={real.videoRef} />
           <AssOverlay ass={ass} videoRef={real.videoRef} keep={real.keep} />
           {testIds && zoomable && (
             <div data-testid="reframe-surface" title="Drag to reframe this camera shot" className="absolute inset-0 cursor-grab touch-none active:cursor-grabbing"
               onPointerDown={down} onPointerMove={move} onPointerUp={up} onPointerCancel={up} />
           )}
+          {testIds && gaming && (
+            <div data-testid="game-surface" title={state.layoutId === 'pip' ? 'Drag the gameplay to move it, or the bubble to move the bubble' : 'Drag to move the gameplay'}
+              className="absolute inset-0 cursor-grab touch-none active:cursor-grabbing" onPointerDown={gdown} onPointerMove={gmove} onPointerUp={gup} onPointerCancel={gup} />
+          )}
+          {hud.map((r, i) => (
+            <div key={i} data-testid="hud-zone" className="pointer-events-none absolute outline-dashed outline-1 outline-amber-300 bg-amber-300/15"
+              style={pct({ x: r[0] / out.w, y: r[1] / out.h, w: r[2] / out.w, h: r[3] / out.h })} />
+          ))}
           {testIds && framed && <span data-testid="manual-framing" className="pointer-events-none absolute left-2 top-2 rounded-full bg-black/60 px-2 py-0.5 text-[10px] font-medium text-white">Framed by hand</span>}
         </>
       ) : layout.thumb.map((r, i) => <Region key={i} r={r} thumbnail={thumbnail} />)}

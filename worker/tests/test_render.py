@@ -295,3 +295,22 @@ def test_hand_framed_shot_and_speaker_colours_reach_the_export(conn, data_dir, c
     from clipforge_worker.clips.reframe import center_at
     assert center_at(seen["kf"], 1.5) == (0.8, 0.5) and center_at(seen["kf"], 0.5) == (0.3, 0.4) and center_at(seen["kf"], 3) == (0.3, 0.4)
     assert "\\1c&H332211&" in seen["ass"] and "\\1c&HF28D5B&" in seen["ass"]  # speaker 0 as picked, speaker 1 the default blue
+
+
+def test_gaming_layouts_crop_and_place_the_facecam_and_gameplay():
+    from clipforge_worker.clips.gaming import regions
+    from clipforge_worker.render.graph import build_command
+    cam = {"x": 0.02, "y": 0.7, "w": 0.25, "h": 0.28}
+    base = {"aspect": "9:16", "resolution": "1080p", "brand": {}, "facecam": cam, "game": [0.4, 0.5],
+            "pip": {"x": 0.7, "y": 0.2, "size": 0.4, "shape": "circle"}}
+    def graph(layout, **kw):
+        cmd = build_command("s.mp4", "o.mp4", {**base, "layoutId": layout, **kw}, [[0, 0.5, 0.5]], 1920, 1080, 10, 20, None, "a.ass", "libx264", wide=[[0, 100]])
+        return cmd[cmd.index("-filter_complex") + 1]
+    top = graph("facecam-top")
+    (face, game) = regions("facecam-top", base, 1920, 1080, 1080, 1920)
+    assert f"crop={face['src'][2]}:{face['src'][3]}:{face['src'][0]}:{face['src'][1]},scale=1080:672" in top
+    assert "scale=1080:1248" in top and "overlay=0:672" in top and "boxblur" not in top  # no wide-shot blur in gaming layouts
+    pip = graph("pip")
+    assert "geq=" in pip and "hypot(" in pip and "overlay=" in pip
+    assert "geq=" not in graph("gameplay-only") and "split" not in graph("gameplay-only").split(";")[0]
+    assert "geq=" not in graph("facecam-top", facecam=None) and "overlay" not in graph("pip", facecam=None).split("subtitles")[0]

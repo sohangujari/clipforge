@@ -5,6 +5,7 @@ import logging
 import time
 import uuid
 
+from .. import chat as CHAT
 from .. import signals as SIG
 from ..clips.boundaries import dedupe, overlap, snap
 from ..clips.scoring import fuse
@@ -69,16 +70,17 @@ def _cues(sents, sig: dict) -> dict[int, list[str]]:
                 if name not in lst:
                     lst.append(name)
                 return
-    for kind in ("laughter", "applause", "cheering"):
+    for kind, name in (("laughter", "laughter"), ("applause", "applause"), ("cheering", "cheering"), ("scream", "scream"),
+                       ("chat", "chat spike"), ("chat_funny", "chat laughing"), ("chat_hype", "chat hype")):
         for t, _z in SIG.peaks(sig, kind, z_min=CUE_Z):
-            at(t, kind)
+            at(t, name)
     for s in sents:
         f = SIG.segment_features(sig, s.start, max(s.start, s.end - SIG.REACTION_TRAIL_S))
         if f["energy"] >= 2.5:
             cues.setdefault(s.id, []).append("loud")
         if f["pace"] >= 2.5:
             cues.setdefault(s.id, []).append("fast")
-    return cues
+    return {k: v[:5] for k, v in cues.items()}  # the prompt schema takes ≤ 5 per sentence
 
 
 def _text(words: list[dict], a: float, b: float) -> str:
@@ -111,6 +113,9 @@ def run(ctx) -> None:
     words = json.loads((md / "transcript.json").read_text())["words"]
     sents = split_sentences(words)
     sig = json.loads((md / "signals.json").read_text()) if (md / "signals.json").exists() else {}
+    CHAT.ensure(md)  # an imported chat file
+    if sig.get("hop"):
+        sig.update(CHAT.signal(md, sig["hop"], len(sig.get("rms_db", []))))
     s = ctx.settings
     length_range = tuple(s.get("lengthRange") or (30, 90))
     duration = float(ctx.project.get("durationSec") or (words[-1]["e"] if words else 0))

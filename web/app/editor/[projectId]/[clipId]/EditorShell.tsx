@@ -9,6 +9,7 @@ import type { Range } from '@/lib/cuts'
 import { shotAt, withFocus, type EditorState } from '@/lib/editor'
 import type { Keyframe } from '@/lib/reframe'
 import { defaultLayout, type People } from '@/lib/people'
+import { DEFAULT_PIP, atSeam, type Box } from '@/lib/gaming'
 import { speakerList, type Speaker } from '@/lib/speakers'
 import { useAutosave } from '@/lib/use-autosave'
 import { historyReducer, initHistory } from '@/lib/history'
@@ -34,7 +35,9 @@ const PANELS: Record<SectionId, (p: PanelProps) => React.ReactNode> = {
 }
 
 export interface RealClip { proxyUrl: string; trackUrl: string; peopleUrl: string; edit?: ClipEdit; silences: Range[]; keywords: string[]; hook?: string
-  cuts: number[]; duration: number; speakers: Speaker[] | null }
+  cuts: number[]; duration: number; speakers: Speaker[] | null
+  /** where the facecam box is remembered (channel or video) and the box to start with */
+  facecam: { key: string; box: Box | null } }
 type Props = { project: MockProject; clip: MockClip; clips: MockClip[]; real?: RealClip }
 type Track = { keyframes: Keyframe[]; wide: Range[]; fps: number }
 type Loaded = { state: EditorState; track: Track; settingsBrand: EditorState['brand']; people: People | null }
@@ -54,10 +57,11 @@ export function EditorShell(props: Props) {
       .then(async ([brand, presets]) => {
         const all: SubtitleStyle[] = [...builtinPresets, ...(presets?.custom ?? [])]
         const e = props.real?.edit
+        const facecam = props.real?.facecam.box ?? null
+        const layoutId = props.real ? defaultLayout(await people, props.project.contentType, facecam) : layoutsFor(props.project.contentType)[0]?.id ?? 'single'
         const base: EditorState = {
-          aspect: '9:16',
-          layoutId: props.real ? defaultLayout(await people) : layoutsFor(props.project.contentType)[0]?.id ?? 'single',
-          style: all.find((p) => p.id === presets?.defaultId) ?? builtinPresets[0],
+          aspect: '9:16', layoutId,
+          style: atSeam(all.find((p) => p.id === presets?.defaultId) ?? builtinPresets[0], layoutId, !!facecam),
           subtitlesOn: true, watermarkOn: true,
           brand: brand ?? { position: 'br', opacity: 80, sizePct: 12, marginPct: 4 },
           trim: { start: props.clip.startSec, end: props.clip.endSec },
@@ -66,6 +70,7 @@ export function EditorShell(props: Props) {
           removeFillers: true, removePauses: true, autoZoom: true, bumpers: true,
           hook: { on: false, text: props.real?.hook ?? props.clip.titles[0] ?? '' },
           cuts: [], focus: [], speakerColors: false,
+          facecam, game: [0.5, 0.5], pip: DEFAULT_PIP, hud: { preset: null, zones: [] },
         }
         const saved: Partial<ClipEdit> = { ...e }
         delete saved.keep; delete saved.zooms // derived from the switches; worked out again here
@@ -116,6 +121,12 @@ function Editor({ project, clip, clips, initial, real, track, settingsBrand, peo
     const r = await fetch(`/api/projects/${project.id}`, { method: 'PATCH', keepalive: true, body: JSON.stringify({ speakers: v.map((x, i) => ({ ...x, name: x.name.trim() || `Speaker ${i + 1}` })) }) })
     if (!r.ok) toast.error("Couldn't save the speaker names")
   }, [real, project.id]))
+  // The facecam box is remembered for the channel (or this video): the next stream starts with it.
+  useAutosave(state.facecam, useCallback(async (box: Box | null) => {
+    if (!real || !box) return
+    const all = await fetch('/api/settings/facecams').then((r) => r.json()).catch(() => ({}))
+    await fetch('/api/settings/facecams', { method: 'PUT', keepalive: true, body: JSON.stringify({ ...all, [real.facecam.key]: box }) })
+  }, [real]))
   const speakerColors = useMemo(() => speakerList(saved, Math.max(saved?.length ?? 0, 4)).map((x) => x.color), [saved]) // as the export (render.py)
   const shot = real ? shotAt(real.cuts, real.duration, t) : null
 
@@ -148,7 +159,8 @@ function Editor({ project, clip, clips, initial, real, track, settingsBrand, peo
 
   const video = real ? { src: real.proxyUrl, track: track.keyframes, wide: track.wide, people, playing, onTime: setT, videoRef, ...cuts,
     speakerColors, shotAt: (at: number) => shotAt(real.cuts, real.duration, at),
-    onFocus: (sh: [number, number], x: number, y: number) => set({ focus: withFocus(state.focus, sh, x, y) }) } : undefined
+    onFocus: (sh: [number, number], x: number, y: number) => set({ focus: withFocus(state.focus, sh, x, y) }),
+    onGame: (patch: Partial<EditorState>) => set(patch), showHud: section === 'layout' } : undefined
   // Real clips: no second preview in the side panel (a second video + libass instance is too heavy for 8 GB).
   const frame = (cls: string, testIds = true) => (real && !testIds ? null
     : <CanvasFrame state={state} t={t} thumbnail={project.thumbnail} className={cls} testIds={testIds} real={video} />)
@@ -172,7 +184,7 @@ function Editor({ project, clip, clips, initial, real, track, settingsBrand, peo
           <h2 className="sticky top-0 z-10 bg-cf-panel/95 px-5 pb-3 pt-5 text-lg font-bold backdrop-blur">{SECTIONS.find((s) => s.id === section)?.label}</h2>
           <div className="px-5 pb-8">
             <Panel state={state} set={set} project={project} clip={clip} clips={clips} preview={frame('w-36', false)} real={!!real} people={people} saveEdit={async () => { await flushEdit(); await saveEdit(state) }}
-              t={t} seek={(at) => { setPlaying(false); setT(at) }} keep={cuts.keep} shot={shot} speakers={speakers} setSpeakers={setSaved} />
+              t={t} seek={(at) => { setPlaying(false); setT(at) }} keep={cuts.keep} shot={shot} speakers={speakers} setSpeakers={setSaved} videoRef={real ? videoRef : undefined} />
           </div>
         </aside>
         <Rail value={section} onChange={setSection} />

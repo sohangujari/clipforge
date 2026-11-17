@@ -3,7 +3,8 @@ import { randomUUID } from 'node:crypto'
 import { z } from 'zod'
 import { getDb } from './db'
 import { derive, type ClipEdit } from './clip-edit'
-import { readPeople, readSilences, readWords } from './clip-views'
+import { readFacecam, readPeople, readSilences, readWords } from './clip-views'
+import { DEFAULT_PIP, atSeam } from './gaming'
 import { defaultLayout } from './people'
 import { getSetting } from './settings'
 import { builtinPresets } from './subtitle-presets'
@@ -15,13 +16,16 @@ type ClipRow = { projectId: string; startSec: number; endSec: number; titles: st
 
 /** Editor defaults for a clip never opened in the editor: brand kit + default subtitle preset, 9:16 face crop, fillers and
  * pauses cut, auto-zoom on, the AI hook line written but off — the same as the editor starts with (EditorShell). */
-async function defaultEdit(clip: ClipRow, resolution: ClipEdit['resolution']): Promise<ClipEdit> {
+async function defaultEdit(clip: ClipRow, resolution: ClipEdit['resolution'], project: { contentType: string; channel: string | null }): Promise<ClipEdit> {
   const [brand, presets] = await Promise.all([getSetting('brandKit'), getSetting('subtitlePresets')])
   const style = [...builtinPresets, ...presets.custom].find((p) => p.id === presets.defaultId) ?? builtinPresets[0]
   const trim = { start: clip.startSec, end: clip.endSec }
   const words = readWords(clip.projectId).filter((w) => w.s >= trim.start - 0.05 && w.e <= trim.end + 0.05)
   const on = { removeFillers: true, removePauses: true, autoZoom: true }
-  return { aspect: '9:16', layoutId: defaultLayout(readPeople(clip.projectId)), style, subtitlesOn: true, watermarkOn: true, brand, trim, resolution, ...on, bumpers: true, cuts: [], focus: [], speakerColors: false,
+  const { box: facecam } = await readFacecam(clip.projectId, project.channel)
+  const layoutId = defaultLayout(readPeople(clip.projectId), project.contentType, facecam)
+  return { aspect: '9:16', layoutId, style: atSeam(style, layoutId, !!facecam), facecam, game: [0.5, 0.5], pip: DEFAULT_PIP, hud: { preset: null, zones: [] },
+    subtitlesOn: true, watermarkOn: true, brand, trim, resolution, ...on, bumpers: true, cuts: [], focus: [], speakerColors: false,
     hook: { on: false, text: clip.hook ?? JSON.parse(clip.titles)[0] ?? '' }, // off unless switched on: a text box over the opening covers the speaker
     ...derive({ trim, words, ...on }, { silences: readSilences(clip.projectId), keywords: clip.keywords ? JSON.parse(clip.keywords) : [] }) }
 }
@@ -35,7 +39,8 @@ export async function exportClips(projectId: string, clipIds: string[] | 'all', 
   // Clips never opened in the editor render with today's defaults, sent with the job — not saved on the clip, so later
   // Settings changes (logo, default style) still apply to them.
   const edits: Record<string, ClipEdit> = {}
-  for (const c of clips) if (!c.edit) edits[c.id] = await defaultEdit(c, resolution)
+  const project = await db.project.findUniqueOrThrow({ where: { id: projectId }, select: { contentType: true, channel: true } })
+  for (const c of clips) if (!c.edit) edits[c.id] = await defaultEdit(c, resolution, project)
   const id = randomUUID()
   await db.job.create({ data: { id, projectId, type: 'render', payload: JSON.stringify({ clipIds: clips.map((c) => c.id), resolution, zip: clipIds === 'all', edits }) } })
   return { jobId: id }

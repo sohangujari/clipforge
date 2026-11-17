@@ -5,6 +5,7 @@ import { PROVIDER_KINDS } from './ai/types'
 import { SubtitleStyleSchema } from './subtitle-presets'
 import { BrandKitSchema } from './brand-kit'
 import { LayoutTemplates } from './layout-templates'
+import { BoxSchema } from './clip-edit'
 import { CONTENT_TYPES, TONES } from './constants'
 
 /** Names and brand words fed to Whisper's prompt. Trimmed, empties dropped, ≤ 50 × 40 chars. */
@@ -33,6 +34,8 @@ export const schemas = {
   /** Requests per provider:model for the current Pacific-time day (free tiers reset at midnight Pacific). */
   llmUsage: z.object({ date: z.string().default(''), counts: z.record(z.string(), z.number()).default({}) }).default({ date: '', counts: {} }),
   layoutTemplates: LayoutTemplates,
+  /** Facecam boxes remembered per channel ("twitch:<login>") or per uploaded video ("project:<id>") */
+  facecams: z.record(z.string().max(140), BoxSchema).default({}),
   profile: z.object({ name: z.string().max(80).default(''), handle: z.string().max(40).default('') }).default({ name: '', handle: '' }),
 }
 

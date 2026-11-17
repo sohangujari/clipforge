@@ -7,5 +7,10 @@ export interface People { track: Keyframe[]; faceH: number | null; multi: boolea
 
 export const SPEAKER_LAYOUTS = ['active-speaker', 'split', 'grid'] as const
 
-/** Active speaker is the default when two or more people talk and share the screen at some point. */
-export const defaultLayout = (p: People | null) => (p && p.multi && p.speakers.length >= 2 ? 'active-speaker' : 'single')
+/** The layout a clip starts with. Streams: facecam on top when a webcam overlay was found, else the gameplay alone;
+ * reactions: the reactor under the content. Otherwise active speaker when two or more people talk and share the screen. */
+export function defaultLayout(p: People | null, contentType = 'auto', facecam: unknown = null) {
+  if (contentType === 'gaming') return facecam ? 'facecam-top' : 'gameplay-only'
+  if (contentType === 'reaction' && facecam) return 'reaction-stack'
+  return p && p.multi && p.speakers.length >= 2 ? 'active-speaker' : 'single'
+}

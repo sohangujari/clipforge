@@ -24,7 +24,8 @@ CLASSES = {
 REACTION_TRAIL_S = 2.0         # laughs and applause land just after the line
 # Floor for the spread in robust_z: most frames score ~0 for reactions, so the measured spread can be 0 and
 # every speck of noise would look enormous. Units: class probability, dB, words/s.
-MIN_SCALE = {"laughter": 0.01, "applause": 0.01, "cheering": 0.01, "scream": 0.01, "gasp": 0.01, "rms_db": 3.0, "pace": 0.5}
+MIN_SCALE = {"laughter": 0.01, "applause": 0.01, "cheering": 0.01, "scream": 0.01, "gasp": 0.01, "rms_db": 3.0, "pace": 0.5,
+             "chat": 0.3, "chat_funny": 0.15, "chat_hype": 0.15}  # messages/s: a quiet chat's odd burst isn't a spike
 
 
 def _class_indices() -> dict[str, list[int]]:
@@ -60,10 +61,12 @@ def robust_z(x, min_scale: float = 1e-6) -> np.ndarray:
 def segment_features(sig: dict, start: float, end: float) -> dict:
     """Max robust z inside [start, end + 2 s] for each signal; energy = loudness, pace = words/s."""
     hop = sig["hop"]
-    a, b = int(start / hop), int((end + REACTION_TRAIL_S) / hop) + 1
+    a, b = int(start / hop), int((end + REACTION_TRAIL_S) / hop) + 1  # chat is already shifted back (chat.DELAY_S)
     out = {}
     for k, src in (("laughter", "laughter"), ("applause", "applause"), ("cheering", "cheering"),
-                   ("scream", "scream"), ("energy", "rms_db"), ("pace", "pace")):
+                   ("scream", "scream"), ("energy", "rms_db"), ("pace", "pace"), ("chat", "chat")):
+        if k == "chat" and src not in sig:
+            continue  # no chat for this video
         z = robust_z(sig.get(src, []), MIN_SCALE.get(src, 1e-6))
         seg = z[a:b]
         out[k] = round(float(seg.max()), 2) if seg.size else 0.0

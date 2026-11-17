@@ -106,7 +106,8 @@ test('invalid edits are rejected', async () => {
   const { ids } = await projectWithClips()
   const edit = await validEdit()
   expect((await patch(ids[0], { edit: { ...edit, trim: { start: 20, end: 20 } } })).status).toBe(400)
-  expect((await patch(ids[0], { edit: { ...edit, layoutId: 'pip' } })).status).toBe(400) // needs facecam detection (Phase 7)
+  expect((await patch(ids[0], { edit: { ...edit, layoutId: 'screen-zoom' } })).status).toBe(400) // needs screen detection (Phase 8)
+  expect((await patch(ids[0], { edit: { ...edit, facecam: { x: 0.9, y: 0, w: 0, h: 0.2 } } })).status).toBe(400) // empty box
   expect((await patch(ids[0], { status: 'nope' })).status).toBe(400)
 })
 
@@ -276,4 +277,37 @@ test('speaker names and colours are saved on the project', async () => {
   expect((await ok.json()).speakers).toEqual([{ name: 'Asha', color: '#112233' }, { name: 'Ben', color: '#445566' }])
   expect((await send([{ name: '', color: '#112233' }])).status).toBe(400)
   expect((await send([{ name: 'A', color: 'red' }])).status).toBe(400)
+})
+
+test('Phase 7: gaming layouts save with their facecam, bubble and HUD; a stream exports facecam-top with the remembered box', async () => {
+  const { p, ids } = await projectWithClips()
+  const cam = { x: 0, y: 0.7, w: 0.25, h: 0.3 }
+  const edit = { ...(await validEdit()), layoutId: 'pip', facecam: cam, game: [0.4, 0.5], pip: { x: 0.2, y: 0.8, size: 0.3, shape: 'rounded' },
+    hud: { preset: 'gta', zones: [{ x: 0.01, y: 0.72, w: 0.2, h: 0.26 }] } }
+  const res = await patch(ids[0], { edit })
+  expect(res.status).toBe(200)
+  expect((await res.json()).edit).toMatchObject({ layoutId: 'pip', facecam: cam, game: [0.4, 0.5], pip: { shape: 'rounded' }, hud: { preset: 'gta' } })
+  expect((await (await patch(ids[1], { edit: await validEdit() })).json()).edit).toMatchObject({ facecam: null, game: [0.5, 0.5], hud: { zones: [] } })
+
+  const d = await db()
+  await d.project.update({ where: { id: p.id }, data: { contentType: 'gaming', channel: 'twitch:someone' } })
+  await d.clip.update({ where: { id: ids[1] }, data: { edit: null } })
+  const { PUT } = await import('@/app/api/settings/[key]/route')
+  expect((await PUT(new Request('http://x', { method: 'PUT', body: JSON.stringify({ 'twitch:someone': cam }) }), ctx({ key: 'facecams' }))).status).toBe(200)
+  const { jobId } = await (await post('@/app/api/clips/[id]/export/route', ids[1], { resolution: '1080p' })).json()
+  const e = JSON.parse((await d.job.findUniqueOrThrow({ where: { id: jobId } })).payload!).edits[ids[1]]
+  expect(e).toMatchObject({ layoutId: 'facecam-top', facecam: cam, style: { position: 'middle', offsetPct: -15 } })
+})
+
+test('a chat log can be imported for the next Find clips; other files are refused', async () => {
+  const { p } = await projectWithClips()
+  const { POST } = await import('@/app/api/projects/[id]/chat/route')
+  const send = (body: string) => POST(new Request('http://x', { method: 'POST', body }), ctx({ id: p.id }))
+  expect((await send('hello there')).status).toBe(400)
+  expect((await send('')).status).toBe(400)
+  const ok = await send('[0:01:02] amy: KEKW\n')
+  expect(ok.status).toBe(200)
+  expect((await ok.json()).hasChat).toBe(true)
+  const { readFileSync } = await import('node:fs')
+  expect(readFileSync(join(dir, 'media', p.id, 'chat-import'), 'utf8')).toContain('KEKW')
 })

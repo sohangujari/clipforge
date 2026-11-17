@@ -2,6 +2,7 @@ import type { LayoutId } from './layouts'
 import type { Word } from './mock'
 import type { Range } from './cuts'
 import type { Focus } from './reframe'
+import type { Box, Pip } from './gaming'
 import type { SettingValue } from './settings'
 import type { SubtitleStyle } from './subtitle-presets'
 
@@ -32,6 +33,12 @@ export interface EditorState {
   focus: Focus[]
   /** subtitle words in their speaker's colour */
   speakerColors: boolean
+  /** Phase 7, gaming layouts: the webcam overlay in the source frame (null: none found or drawn yet), the gameplay crop's
+   * centre, the picture-in-picture bubble, and the game's HUD zones (subtitles are kept off them) */
+  facecam: Box | null
+  game: [number, number]
+  pip: Pip
+  hud: { preset: string | null; zones: Box[] }
 }
 
 export const ASPECT_RATIO: Record<Aspect, number> = { '9:16': 9 / 16, '1:1': 1, '16:9': 16 / 9 }

@@ -36,6 +36,7 @@ model Project {
   settings    String // JSON ProjectSettings
   warning     String?
   speakers    String? // [{name, color}] by speaker number (Phase 5: editable speaker names/colours)
+  channel     String? // "twitch:<login>" / "youtube:<channel id>" for links: the facecam box is remembered per channel (Phase 7)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
   jobs        Job[]

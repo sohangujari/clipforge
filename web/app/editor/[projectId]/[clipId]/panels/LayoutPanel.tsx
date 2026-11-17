@@ -11,11 +11,13 @@ import { Segmented } from '@/components/cf/Segmented'
 import { LAYOUTS, layoutsFor } from '@/lib/layouts'
 import { SPEAKER_LAYOUTS } from '@/lib/people'
 import { withFocus } from '@/lib/editor'
+import { atSeam, FACE_LAYOUTS, isGaming } from '@/lib/gaming'
+import { GamingSections, placeSubtitles } from './GamingSections'
 import { cn } from '@/lib/utils'
 import type { PanelProps } from './types'
 
-/** Layouts the export renders today, and the phase that brings each of the others (they need speaker/facecam/screen detection). */
-const SOON: Partial<Record<string, number>> = { 'facecam-top': 7, 'facecam-bottom': 7, pip: 7, 'gameplay-only': 7, 'reaction-stack': 7, 'screen-zoom': 8 }
+/** Layouts the export doesn't render yet, and the phase that brings them (they need screen detection). */
+const SOON: Partial<Record<string, number>> = { 'screen-zoom': 8 }
 
 /** Save this clip's framing, subtitle spot and watermark spot as a template, or apply a saved one. */
 function Templates({ state, set }: Pick<PanelProps, 'state' | 'set'>) {
@@ -63,7 +65,13 @@ function Framing({ state, set, shot }: Pick<PanelProps, 'state' | 'set' | 'shot'
   )
 }
 
-export function LayoutPanel({ state, set, project, preview, real, people, shot }: PanelProps) {
+export function LayoutPanel({ state, set, project, preview, real, people, shot, videoRef }: PanelProps) {
+  const pick = (id: typeof state.layoutId) => {
+    if (!isGaming(id)) return set({ layoutId: id })
+    const next = { ...state, layoutId: id, style: atSeam(state.style, id, !!state.facecam) } // facecam layouts: subtitles on the seam
+    const v = videoRef?.current
+    set({ layoutId: id, style: next.style, ...placeSubtitles(next, v?.videoWidth || 1920, v?.videoHeight || 1080) })
+  }
   return (
     <div className="flex flex-col gap-6">
       <Section title={`Layouts for ${project.contentType}`}>
@@ -73,18 +81,20 @@ export function LayoutPanel({ state, set, project, preview, real, people, shot }
             const why = real && !soon ? unavailable(l.id, people) : undefined
             return (
               <button key={l.id} type="button" data-testid="layout-card" data-layout={l.id} aria-pressed={state.layoutId === l.id} disabled={!!soon || !!why}
-                onClick={() => set({ layoutId: l.id })}
+                onClick={() => pick(l.id)}
                 className={cn('flex flex-col items-center gap-1.5 rounded-xl p-2 transition-all duration-150 disabled:cursor-not-allowed disabled:opacity-50',
                   state.layoutId === l.id ? 'bg-card shadow-cf ring-2 ring-cf-accent' : 'hover:bg-card/60')}>
                 <LayoutThumb layout={l} className="w-full" />
                 <span className="text-center text-[11px] font-medium leading-tight">{l.label}</span>
                 {(soon || why) && <span className="text-center text-[10px] leading-tight text-muted-foreground">{soon ? `Coming in Phase ${soon}` : why}</span>}
+                {real && !state.facecam && (FACE_LAYOUTS as readonly string[]).includes(l.id) && <span className="text-center text-[10px] leading-tight text-muted-foreground">Draw the facecam</span>}
               </button>
             )
           })}
         </div>
       </Section>
       {real && (state.layoutId === 'single' || state.layoutId === 'active-speaker') && <Framing state={state} set={set} shot={shot} />}
+      {real && isGaming(state.layoutId) && <GamingSections state={state} set={set} videoRef={videoRef} />}
       {real && <Templates state={state} set={set} />}
       <Section title="Platform safe zones">
         <Field label="Show where app buttons and captions will cover the video">

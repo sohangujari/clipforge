@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button'
 import type { ProjectView } from '@/lib/projects'
 import { cn } from '@/lib/utils'
 
-const STAGES = [['importing', 'Importing'], ['preparing', 'Preparing'], ['transcribing', 'Transcribing'], ['romanizing', 'Hinglish captions'],
+const STAGES = [['importing', 'Importing'], ['chat', 'Downloading chat'], ['preparing', 'Preparing'], ['transcribing', 'Transcribing'], ['romanizing', 'Hinglish captions'],
   ['signals', 'Listening for reactions'], ['faces', 'Finding faces'], ['speakers', 'Finding who speaks'], ['analyzing', 'Finding clips']] as const
 
 /** Live view of a real project's job over SSE. */
@@ -48,7 +48,7 @@ export function LiveProcessing({ initial }: { initial: ProjectView }) {
     if (what === 'retry') setStream((n) => n + 1)
   }
 
-  const stages = STAGES.filter(([id]) => (id !== 'romanizing' || p.captionScript === 'hinglish') && (p.jobType === 'ingest' || id === 'signals' || id === 'faces' || id === 'speakers' || id === 'analyzing'))
+  const stages = STAGES.filter(([id]) => (id !== 'romanizing' || p.captionScript === 'hinglish') && (id !== 'chat' || p.sourceType === 'url') && (p.jobType === 'ingest' || id === 'signals' || id === 'faces' || id === 'speakers' || id === 'analyzing'))
   const current = stages.findIndex(([id]) => id === p.stage)
   const failed = p.status === 'failed', cancelled = p.status === 'cancelled', active = p.status === 'queued' || p.status === 'processing'
   const headline = failed ? 'Processing failed' : cancelled ? 'Cancelled' : p.status === 'queued' ? 'Waiting to start…'

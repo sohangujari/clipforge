@@ -25,5 +25,7 @@ export interface PanelProps {
   /** the camera shot under the playhead (real clips) */
   shot: [number, number] | null
   speakers: Speaker[]
+  /** the preview's video (real clips): the facecam/HUD picker draws its frame */
+  videoRef?: React.RefObject<HTMLVideoElement | null>
   setSpeakers: (s: Speaker[]) => void
 }

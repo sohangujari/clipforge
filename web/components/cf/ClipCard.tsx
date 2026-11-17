@@ -13,7 +13,7 @@ import { ScoreBadge } from './ScoreBadge'
 /** Works for demo clips (MockClip) and real ones (ClipView adds status/thumbnail/signals/source). */
 export type CardClip = MockClip & { status?: string; thumbnailUrl?: string; signalsUsed?: string[]; source?: string; query?: string }
 
-const SIGNAL_LABEL: Record<string, string> = { laughter: 'Laughter', applause: 'Applause', cheering: 'Cheering', loud: 'High energy' }
+const SIGNAL_LABEL: Record<string, string> = { laughter: 'Laughter', applause: 'Applause', cheering: 'Cheering', scream: 'Shouting', loud: 'High energy', chat: 'Chat spike' }
 
 export function ClipCard({ clip, thumbnail, previewSrc, onOpen, onKeep, onDelete }: {
   clip: CardClip; thumbnail: string; previewSrc?: string; onOpen: () => void; onKeep?: () => void; onDelete?: () => void

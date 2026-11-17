@@ -12,7 +12,7 @@ export interface LlmTask<I extends z.ZodType = z.ZodType, O extends z.ZodType = 
 const task = <I extends z.ZodType, O extends z.ZodType>(t: LlmTask<I, O>) => t
 
 const TYPES = CONTENT_TYPES.filter((t) => t !== 'auto') as [string, ...string[]]
-const CUE = z.enum(['laughter', 'applause', 'cheering', 'loud', 'fast'])
+const CUE = z.enum(['laughter', 'applause', 'cheering', 'scream', 'loud', 'fast', 'chat spike', 'chat laughing', 'chat hype'])
 const Sentence = z.object({ id: z.number().int().min(0), t: z.string().max(10), text: z.string().max(2000), cues: z.array(CUE).max(5).default([]) })
 // Model output is trimmed/clamped, never rejected: one over-long string must not throw away a whole batch of clips.
 const txt = (n: number) => z.string().overwrite((s) => s.slice(0, n))
@@ -41,8 +41,9 @@ const taste = (e: z.output<typeof Examples>) => [
 ].filter(Boolean).join('\n\n')
 
 const RULES = 'Pick sentence ids from the transcript only — never invent timestamps. Each clip must be a complete thought that makes sense on its own. ' +
-  'The hook sentence must grab attention within the first 3 seconds; the clip will start on it. Cues in parentheses are detected in the audio: ' +
-  '(laughter)/(applause)/(cheering) mean the audience reacted right after that sentence; (loud)/(fast) mean raised energy.'
+  'The hook sentence must grab attention within the first 3 seconds; the clip will start on it. Cues in parentheses are detected in the audio and the stream chat: ' +
+  '(laughter)/(applause)/(cheering) mean the audience reacted right after that sentence; (scream) is shouting; (loud)/(fast) mean raised energy; ' +
+  '(chat spike)/(chat laughing)/(chat hype) mean the live chat blew up there — viewers found it funny or exciting, a strong sign of a clip.'
 
 const highlights = task({
   input: z.object({ contentType: z.string().default('custom'), detectType: z.boolean().default(false), tone: z.string().default('neutral'),
@@ -69,10 +70,10 @@ const score = task({
   system: (i) => [
     `You rate short-form clips (${i.contentType}) for viral potential. For each clip give 0–100 scores: hook (first 3 seconds), emotion, value (shareability/usefulness), pacing (clarity, no dead air), trend (fit with current short-form trends — your estimate).`,
     EXTRAS[i.contentType] ? `Also score these extra dimensions in "extra": ${EXTRAS[i.contentType].join(', ')}.` : '',
-    'Give a short reason per dimension in "reasons" (keys: hook, emotion, value, pacing, trend), a one-line summary of why it would or would not perform, and up to 3 concrete improvement tips. Be honest: most clips are 40–75; reserve 85+ for clips that would clearly stop the scroll. Audio cues (laughter, applause) are real audience reactions.',
+    'Give a short reason per dimension in "reasons" (keys: hook, emotion, value, pacing, trend), a one-line summary of why it would or would not perform, and up to 3 concrete improvement tips. Be honest: most clips are 40–75; reserve 85+ for clips that would clearly stop the scroll. Audio and chat cues (laughter, applause, chat spikes) are real audience reactions.',
     i.brief ? 'Be brief: each reason under 10 words, the summary under 20 words, at most 1 tip. Use the clip numbers exactly as given for "key".' : 'Use the clip numbers exactly as given for "key".',
   ].filter(Boolean).join('\n\n'),
-  prompt: (i) => i.clips.map((c) => `Clip ${c.key}${c.cues.length ? ` (audio: ${c.cues.join(', ')})` : ''}:\n${c.text}`).join('\n\n'),
+  prompt: (i) => i.clips.map((c) => `Clip ${c.key}${c.cues.length ? ` (cues: ${c.cues.join(', ')})` : ''}:\n${c.text}`).join('\n\n'),
 })
 
 const MetaItem = z.object({ key: z.string(), titles: upTo(txt(60), 3).refine((a) => a.length > 0), // not a tuple: Gemini rejects array-form "items"

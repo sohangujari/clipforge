@@ -46,3 +46,12 @@ def test_hand_framing_and_speaker_words_match_the_editor():
     assert apply_focus(c["kf"], []) == c["kf"]
     talk = [{**w, "speaker": i % 2} for i, w in enumerate(f["words"])]
     assert retime_words(talk, f["keep"]) == f["retimedSpeakers"]
+
+
+def test_gaming_regions_match_the_editor():
+    """Facecam top/bottom, PiP, gameplay only and reaction stack: the export crops and places exactly what the preview draws."""
+    from clipforge_worker.clips.gaming import regions
+    f = json.loads((FIX.parent / "cuts-fixture.json").read_text())
+    assert len(f["gaming"]) == 60
+    for c in f["gaming"]:
+        assert regions(c["layout"], c["o"], *c["src"], *c["out"]) == c["regions"], c

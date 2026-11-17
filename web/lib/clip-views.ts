@@ -7,6 +7,8 @@ import { dataDir } from './paths'
 import type { ClipEdit } from './clip-edit'
 import type { Range } from './cuts'
 import type { People } from './people'
+import { detectFacecam, type Box } from './gaming'
+import { getSetting } from './settings'
 import type { MockClip, Word } from './mock'
 
 /** A real clip in the same shape as the Phase 1 MockClip, so ClipCard/ClipDetails/editor accept both. */
@@ -43,6 +45,18 @@ export function readCuts(projectId: string): number[] {
   try {
     return JSON.parse(readFileSync(join(/*turbopackIgnore: true*/ dataDir(), 'media', projectId, 'faces.json'), 'utf8')).cuts ?? []
   } catch { return [] }
+}
+
+/** Where a project's facecam is remembered (per channel for links, else per video) and its box: the one last drawn for
+ * that key, else the one found in faces.json; null when there's none. */
+export async function readFacecam(projectId: string, channel?: string | null): Promise<{ key: string; box: Box | null }> {
+  const key = channel || `project:${projectId}`
+  const saved = (await getSetting('facecams'))[key]
+  if (saved) return { key, box: saved }
+  try {
+    const f = JSON.parse(readFileSync(join(/*turbopackIgnore: true*/ dataDir(), 'media', projectId, 'faces.json'), 'utf8'))
+    return { key, box: detectFacecam(f.all, f.w, f.h) }
+  } catch { return { key, box: null } }
 }
 
 export function toClipView(r: Row, words: Word[]): ClipView {

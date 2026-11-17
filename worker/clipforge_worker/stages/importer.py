@@ -1,4 +1,5 @@
 """Get the source video into data/media/<id>/source.<ext>: download URLs with yt-dlp, verify uploads."""
+import json
 import os
 import re
 import shutil
@@ -62,5 +63,10 @@ def run(ctx) -> None:
     src = next((p for p in ctx.media_dir.glob("source.*") if FINISHED.match(p.name)), None)
     if not src:
         raise UserError("Download finished but no video file was produced")
-    ctx.set_project(title=(info.get("title") or ctx.project["title"])[:200], sourceFile=str(src.relative_to(ctx.data_dir)))
+    # For the chat stage (which stream, was it live) and the facecam memory (which channel).
+    ex, who = info.get("extractor_key") or "", info.get("channel_id") or info.get("uploader_id") or info.get("channel")
+    (ctx.media_dir / "source.json").write_text(json.dumps({"extractor": ex, "id": info.get("id"), "duration": info.get("duration"),
+                                                          "live": info.get("live_status") == "was_live" or bool(info.get("was_live"))}))
+    ctx.set_project(title=(info.get("title") or ctx.project["title"])[:200], sourceFile=str(src.relative_to(ctx.data_dir)),
+                    channel=f"{ex.lower().removesuffix('vod')}:{who}"[:120] if who else None)
     ctx.report(1.0)
