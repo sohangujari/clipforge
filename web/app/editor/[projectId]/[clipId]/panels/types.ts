@@ -1,6 +1,8 @@
 import type { EditorState } from '@/lib/editor'
 import type { MockClip, MockProject } from '@/lib/mock'
 import type { People } from '@/lib/people'
+import type { Range } from '@/lib/cuts'
+import type { Speaker } from '@/lib/speakers'
 
 export interface PanelProps {
   state: EditorState
@@ -15,4 +17,13 @@ export interface PanelProps {
   saveEdit?: () => Promise<void>
   /** Speakers found in the video (null: none yet, or not a real clip). */
   people?: People | null
+  /** playhead (source seconds) and moving it */
+  t: number
+  seek: (t: number) => void
+  /** what plays after the auto edits and hand cuts */
+  keep: Range[]
+  /** the camera shot under the playhead (real clips) */
+  shot: [number, number] | null
+  speakers: Speaker[]
+  setSpeakers: (s: Speaker[]) => void
 }

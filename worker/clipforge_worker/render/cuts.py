@@ -30,7 +30,7 @@ def retime_words(words: list, keep) -> list:
     for w in words:
         s, e = _r3(to_out(keep, w["s"])), _r3(to_out(keep, w["e"]))
         if e - s >= MIN_HEARD:
-            out.append({"w": w["w"], "s": s, "e": e})
+            out.append({"w": w["w"], "s": s, "e": e, **({"sp": w["speaker"]} if "speaker" in w else {})})
     return out
 
 

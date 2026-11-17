@@ -35,3 +35,27 @@ export function rowScale(faceH: number | null, srcW: number, srcH: number, aspec
   const fullH = srcW / srcH > aspect ? srcH : srcW / aspect
   return Math.min(1, Math.round(((FACE_TO_CROP * faceH * srcH) / fullH) * 10000) / 10000)
 }
+
+/** A camera shot the creator framed by hand: [shot start, shot end, cx, cy] in source time. */
+export type Focus = [a: number, b: number, cx: number, cy: number]
+const JUMP_S = 0.001 // as clips/reframe.py: a cut is a jump, not a pan
+
+/** The face track with each hand-framed shot held still at its chosen centre (worker: clips/reframe.py apply_focus). */
+export function applyFocus(k: Keyframe[], focus: Focus[]): Keyframe[] {
+  if (!focus.length) return k
+  const inside = (t: number) => focus.some(([a, b]) => t >= a && t < b)
+  const out: Keyframe[] = k.filter(([t]) => !inside(t))
+  for (const [a, b, x, y] of focus) {
+    if (!inside(a - JUMP_S)) out.push([a - JUMP_S, ...centerAt(k, a - JUMP_S)])
+    out.push([a, x, y], [b - JUMP_S, x, y])
+    if (!inside(b)) out.push([b, ...centerAt(k, b)])
+  }
+  return out.sort((p, q) => p[0] - q[0])
+}
+
+/** ranges minus the hand-framed shots (a shot you framed is cropped, even where no face was found). */
+export function minusFocus(ranges: [number, number][], focus: Focus[]): [number, number][] {
+  let out = ranges
+  for (const [a, b] of focus) out = out.flatMap(([s, e]): [number, number][] => (b <= s || a >= e ? [[s, e]] : [...(a > s ? [[s, a] as [number, number]] : []), ...(b < e ? [[b, e] as [number, number]] : [])]))
+  return out
+}

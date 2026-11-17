@@ -7,7 +7,7 @@
 import type { AssWord } from './ass'
 
 export type Range = [number, number]
-type Word = { w: string; s: number; e: number }
+type Word = { w: string; s: number; e: number; speaker?: number }
 
 export const FILLERS = new Set(['um', 'umm', 'uh', 'uhh', 'uhm', 'erm', 'er', 'ah', 'hmm', 'hm', 'mm', 'mhm'])
 export const PAUSE_MIN = 0.5  // shorter pauses are speech rhythm — keep them
@@ -21,8 +21,9 @@ const ZOOM_GAP = 3            // seconds between punch-ins
 const r3 = (n: number) => Math.round(n * 1000) / 1000
 const norm = (w: string) => w.toLowerCase().replace(/[^\p{L}\p{N}']/gu, '')
 
-/** The parts of the trim that play, in order. Pauses come from the audio (silences.json), fillers from the transcript. */
-export function keepRanges(trim: { start: number; end: number }, words: Word[], silences: Range[], o: { fillers: boolean; pauses: boolean }): Range[] {
+/** The parts of the trim that play, in order. Pauses come from the audio (silences.json), fillers from the transcript,
+ * o.cuts from the transcript panel (parts the creator cut out by hand). */
+export function keepRanges(trim: { start: number; end: number }, words: Word[], silences: Range[], o: { fillers: boolean; pauses: boolean; cuts?: Range[] }): Range[] {
   const { start, end } = trim
   const cut: Range[] = []
   if (o.pauses) for (const [a, b] of silences) {
@@ -30,6 +31,7 @@ export function keepRanges(trim: { start: number; end: number }, words: Word[], 
     cut.push([a <= start ? start : a + PAD, b >= end ? end : b - PAD]) // no padding kept at the clip's own edges
   }
   if (o.fillers) for (const w of words) if (w.s < end && w.e > start && FILLERS.has(norm(w.w))) cut.push([w.s, w.e])
+  for (const c of o.cuts ?? []) cut.push(c)
   cut.sort((x, y) => x[0] - y[0])
   const keep: Range[] = []
   let at = start
@@ -56,13 +58,16 @@ export function toOut(keep: Range[], t: number): number {
   return o
 }
 
+/** Is any of word w still heard after the cuts? (the same test retimeWords uses) */
+export const heard = (keep: Range[], w: Word) => r3(toOut(keep, w.e)) - r3(toOut(keep, w.s)) >= MIN_HEARD
+
 /** Subtitle words on the cut clip's clock. A word stays if some of it is still heard (Whisper stretches words over
  * pauses, so a cut can take part of one); words entirely inside a cut — fillers — go. */
 export function retimeWords(words: Word[], keep: Range[]): AssWord[] {
   const out: AssWord[] = []
   for (const w of words) {
     const s = r3(toOut(keep, w.s)), e = r3(toOut(keep, w.e))
-    if (e - s >= MIN_HEARD) out.push({ w: w.w, s, e })
+    if (e - s >= MIN_HEARD) out.push({ w: w.w, s, e, ...(w.speaker !== undefined && { sp: w.speaker }) })
   }
   return out
 }

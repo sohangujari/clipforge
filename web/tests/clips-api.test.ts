@@ -246,3 +246,34 @@ test('speaker layouts can be saved; a video with two people talking exports in A
   const { GET } = await import('@/app/api/files/[...path]/route')
   expect((await GET(new Request('http://x'), ctx({ path: ['media', p.id, 'people.json'] }))).status).toBe(200)
 })
+
+test('Phase 5: hand cuts, hand framing, speaker colours and edited words save with the clip; old edits load with none', async () => {
+  const { ids } = await projectWithClips()
+  const edit = { ...(await validEdit()), cuts: [[20, 22]], focus: [[11, 30, 0.3, 0.45]], speakerColors: true,
+    words: [{ w: 'Hullo', s: 10, e: 10.4, speaker: 1 }] }
+  const res = await patch(ids[0], { edit })
+  expect(res.status).toBe(200)
+  expect((await res.json()).edit).toMatchObject({ cuts: [[20, 22]], focus: [[11, 30, 0.3, 0.45]], speakerColors: true, words: [{ w: 'Hullo', speaker: 1 }] })
+  expect((await patch(ids[0], { edit: { ...edit, focus: [[11, 30, 1.5, 0.4]] } })).status).toBe(400) // centre outside the frame
+  const plain = await (await patch(ids[1], { edit: await validEdit() })).json()
+  expect(plain.edit).toMatchObject({ cuts: [], focus: [], speakerColors: false })
+})
+
+test('real views can be typed in and cleared', async () => {
+  const { ids } = await projectWithClips()
+  expect((await (await patch(ids[0], { views: 12400 })).json()).views).toBe(12400)
+  expect((await patch(ids[0], { views: -3 })).status).toBe(400)
+  expect((await patch(ids[0], { views: 'lots' })).status).toBe(400)
+  expect((await (await patch(ids[0], { views: null })).json()).views).toBeUndefined()
+})
+
+test('speaker names and colours are saved on the project', async () => {
+  const { p } = await projectWithClips()
+  const { PATCH } = await import('@/app/api/projects/[id]/route')
+  const send = (speakers: unknown) => PATCH(new Request('http://x', { method: 'PATCH', body: JSON.stringify({ speakers }) }), ctx({ id: p.id }))
+  const ok = await send([{ name: 'Asha', color: '#112233' }, { name: 'Ben', color: '#445566' }])
+  expect(ok.status).toBe(200)
+  expect((await ok.json()).speakers).toEqual([{ name: 'Asha', color: '#112233' }, { name: 'Ben', color: '#445566' }])
+  expect((await send([{ name: '', color: '#112233' }])).status).toBe(400)
+  expect((await send([{ name: 'A', color: 'red' }])).status).toBe(400)
+})

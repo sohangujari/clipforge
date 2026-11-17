@@ -120,3 +120,26 @@ def row_scale(face_h, src_w: int, src_h: int, aspect: float) -> float:
         return 1.0
     full_h = src_h if src_w / src_h > aspect else src_w / aspect
     return min(1.0, round(FACE_TO_CROP * face_h * src_h / full_h, 4))
+
+
+def apply_focus(kf: list, focus: list) -> list:
+    """web/lib/reframe.ts applyFocus: each hand-framed shot [a, b, cx, cy] held still at its chosen centre."""
+    if not focus:
+        return kf
+    inside = lambda t: any(a <= t < b for a, b, *_ in focus)  # noqa: E731
+    out = [list(k) for k in kf if not inside(k[0])]
+    for a, b, x, y in focus:
+        if not inside(a - JUMP_S):
+            out.append([a - JUMP_S, *center_at(kf, a - JUMP_S)])
+        out += [[a, x, y], [b - JUMP_S, x, y]]
+        if not inside(b):
+            out.append([b, *center_at(kf, b)])
+    return sorted(out, key=lambda k: k[0])
+
+
+def minus_focus(ranges: list, focus: list) -> list:
+    """web/lib/reframe.ts minusFocus: a shot you framed is cropped, even where no face was found."""
+    out = [list(r) for r in ranges]
+    for a, b, *_ in focus:
+        out = [p for s, e in out for p in ([[s, e]] if b <= s or a >= e else [*([[s, a]] if a > s else []), *([[b, e]] if b < e else [])])]
+    return out

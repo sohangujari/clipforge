@@ -41,7 +41,7 @@ function PresetGallery({ presets, value, onPick }: { presets: SubtitleStyle[]; v
   )
 }
 
-export function SubtitlesPanel({ state, set, preview }: PanelProps) {
+export function SubtitlesPanel({ state, set, preview, real, speakers, setSpeakers }: PanelProps) {
   const s = state.style
   const st = (patch: Partial<SubtitleStyle>) => set({ style: { ...s, ...patch } })
   const [custom, setCustom] = useState<SubtitleStyle[]>([])
@@ -62,6 +62,21 @@ export function SubtitlesPanel({ state, set, preview }: PanelProps) {
   return (
     <div className="flex flex-col gap-6">
       <Field label="Subtitles on this clip" inline><Switch aria-label="Subtitles on this clip" checked={state.subtitlesOn} onCheckedChange={(subtitlesOn) => set({ subtitlesOn })} /></Field>
+      {real && speakers.length > 1 && (
+        <Section title="Speakers">
+          <Field label="Colour words by speaker" inline>
+            <Switch aria-label="Colour words by speaker" checked={state.speakerColors} onCheckedChange={(speakerColors) => set({ speakerColors })} />
+          </Field>
+          {speakers.map((sp, i) => (
+            <div key={i} className="flex items-center gap-2">
+              <ColorInput label={`Colour of ${sp.name}`} value={sp.color} onChange={(color) => setSpeakers(speakers.map((x, k) => (k === i ? { ...x, color } : x)))} />
+              <Input aria-label={`Name of speaker ${i + 1}`} value={sp.name} maxLength={40}
+                onChange={(e) => setSpeakers(speakers.map((x, k) => (k === i ? { ...x, name: e.target.value } : x)))} />
+            </div>
+          ))}
+          <p className="text-xs text-muted-foreground">Names and colours apply to every clip from this video; the timeline and transcript use them too.</p>
+        </Section>
+      )}
       <Section title="Presets"><PresetGallery presets={[...builtinPresets, ...custom]} value={s.id} onPick={(p) => set({ style: p })} /></Section>
 
       <Section title="Text">

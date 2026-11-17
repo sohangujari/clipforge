@@ -50,6 +50,7 @@ test('subtitles are drawn by libass on a canvas over the video, with the bundled
   await frame(page).getByTestId('clip-video').evaluate((v: HTMLVideoElement, t: number) => { v.currentTime = t }, (word.s + word.e) / 2)
   await page.waitForTimeout(800)
   const on = await frame(page).screenshot()
+  await page.getByRole('button', { name: 'Subtitles', exact: true }).click()
   await page.getByRole('switch', { name: /subtitles/i }).first().click()
   await page.waitForTimeout(500)
   const off = await frame(page).screenshot()
@@ -115,4 +116,34 @@ test('speaker layouts: offered when speakers were found; split/grid need two peo
   await page.getByRole('textbox', { name: 'Template name' }).fill('My podcast')
   await page.getByRole('button', { name: 'Save', exact: true }).click()
   await expect(page.getByRole('button', { name: 'My podcast' })).toBeVisible()
+})
+
+test('transcript editing: cut words out, fix a word, trim to a selection; frame nudges move the trim', async ({ page }) => {
+  await page.goto(editorUrl)
+  const words = page.getByTestId('transcript-word')
+  await expect(words.first()).toBeVisible()
+  const inClip = page.locator('[data-testid=transcript-word]:not([data-cut])')
+  const n = await words.count()
+  expect(n).toBeGreaterThan(6)
+  // cut two words in the middle of the clip
+  const mid = Math.floor(n / 2)
+  await words.nth(mid).click()
+  await words.nth(mid + 1).click({ modifiers: ['Shift'] })
+  await page.getByRole('button', { name: 'Cut', exact: true }).click()
+  await expect(page.getByText(/1 part cut by hand/)).toBeVisible()
+  // fix what Whisper heard
+  await words.nth(1).dblclick()
+  await page.getByLabel('Fix word').fill('ClipForge')
+  await page.keyboard.press('Enter')
+  await expect(words.nth(1)).toHaveText('ClipForge')
+  // frame nudge
+  const start = await page.getByTestId('trim-start').textContent()
+  await page.getByRole('button', { name: 'Start one frame later' }).click()
+  await expect(page.getByTestId('trim-start')).not.toHaveText(start!)
+  await page.waitForTimeout(1500) // autosave
+  const clip = await (await page.request.get(`/api/clips/${editorUrl.split('/').pop()}`)).json()
+  expect(clip.edit.cuts).toHaveLength(1)
+  expect(clip.edit.words.some((w: { w: string }) => w.w === 'ClipForge')).toBe(true)
+  expect(clip.edit.keep.length).toBeGreaterThan(1)
+  expect(await inClip.count()).toBeGreaterThan(0)
 })

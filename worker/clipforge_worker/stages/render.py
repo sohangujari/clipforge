@@ -7,6 +7,7 @@ import zipfile
 from functools import cache
 
 from ..errors import UserError
+from ..clips.reframe import apply_focus, minus_focus
 from ..media import probe
 from ..render.ass import FONTS_DIR, build_ass
 from ..render.cuts import kept_duration, middle_ranges, retime_words
@@ -74,6 +75,13 @@ def _brand_kit(conn) -> dict:
 
 
 SPEAKER_LAYOUTS = ("active-speaker", "split", "grid")
+SPEAKER_COLORS = ["#F26B5B", "#5B8DF2", "#3FA796", "#E2B33C"]  # web/lib/speakers.ts
+
+
+def _speaker_colors(project: dict) -> list:
+    """Each speaker's colour: the one picked in the editor, else the default (web/lib/speakers.ts speakerList)."""
+    saved = json.loads(project.get("speakers") or "[]")
+    return [saved[i]["color"] if i < len(saved) else SPEAKER_COLORS[i % 4] for i in range(max(len(saved), 4))]
 
 
 def _people(ctx, payload: dict, ids: list):
@@ -126,6 +134,8 @@ def run(ctx) -> None:
         hook = edit.get("hook") or {}
         layout = edit["layoutId"]
         kf = people["track"] if people and layout in SPEAKER_LAYOUTS else keyframes  # speaker layouts follow whoever talks
+        focus = (edit.get("focus") or []) if layout in ("single", "active-speaker") else []  # shots framed by hand in the editor
+        kf, clip_wide = apply_focus(kf, focus), minus_focus(wide, focus)
         rows = {**people[layout], "faceH": people["faceH"]} if people and layout in ("split", "grid") else None
         zooms = [[a - start, b - start] for a, b in edit.get("zooms") or []] if layout in ("single", "active-speaker") else []
         intro, outro = _bumpers(ctx, edit)
@@ -136,11 +146,12 @@ def run(ctx) -> None:
         ass_name, out_name = f"{cid}.ass", f"{cid}-{res}.tmp.mp4"
         (out_dir / ass_name).write_text(build_ass({"style": edit["style"], "words": _words(edit, words, start, end, keep), "width": W, "height": H,
                                                    "duration": kept_duration(keep), "watermarkText": _watermark_text(edit),
+                                                   "speakerColors": _speaker_colors(ctx.project) if edit.get("speakerColors") else None,
                                                    "hook": {"text": hook["text"], "end": 3} if hook.get("on") and hook.get("text") else None,
                                                    "middle": middle_ranges([r for r in rows["ranges"] if r[1] > start and r[0] < end], keep,
                                                                            edit["aspect"] != "16:9") if rows else None}))
         cmd = build_command(src, out_name, edit, kf, info["width"], info["height"], start, end, _logo(ctx, edit), ass_name, encoder(),
-                            keep=rel, zooms=zooms, fps=info["fps"], has_audio=info["has_audio"], bumpers=(intro, outro), rows=rows, wide=wide)
+                            keep=rel, zooms=zooms, fps=info["fps"], has_audio=info["has_audio"], bumpers=(intro, outro), rows=rows, wide=clip_wide)
         proc = subprocess.Popen(cmd, cwd=out_dir, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
         try:
             for line in proc.stdout:

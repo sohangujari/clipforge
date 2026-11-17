@@ -34,3 +34,15 @@ def test_cut_retiming_and_zoom_match_the_editor():
     from clipforge_worker.render.cuts import middle_ranges
     assert middle_ranges([[9, 12, 2], [13.2, 14.9, 3], [16, 30, 2]], f["keep"], True) == f["middle"]
     assert middle_ranges([[9, 12, 2]], f["keep"], False) == []
+
+
+def test_hand_framing_and_speaker_words_match_the_editor():
+    from clipforge_worker.clips.reframe import apply_focus, minus_focus
+    from clipforge_worker.render.cuts import retime_words
+    f = json.loads((FIX.parent / "cuts-fixture.json").read_text())
+    c = f["focus"]
+    assert [pytest.approx(k, abs=1e-9) for k in c["out"]] == apply_focus(c["kf"], c["focus"])
+    assert minus_focus(c["wide"], c["focus"]) == c["wideOut"]
+    assert apply_focus(c["kf"], []) == c["kf"]
+    talk = [{**w, "speaker": i % 2} for i, w in enumerate(f["words"])]
+    assert retime_words(talk, f["keep"]) == f["retimedSpeakers"]

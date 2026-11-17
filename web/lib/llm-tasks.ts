@@ -36,8 +36,8 @@ export const FOCUS: Record<string, string> = {
 const focus = (t: string) => FOCUS[t] ?? FOCUS.custom
 const lines = (s: z.output<typeof Sentence>[]) => s.map((x) => `[${x.id}] ${x.t}${x.cues.length ? ` (${x.cues.join(', ')})` : ''} ${x.text}`).join('\n')
 const taste = (e: z.output<typeof Examples>) => [
-  e.kept.length ? `Clips this creator KEPT before (more like these):\n- ${e.kept.join('\n- ')}` : '',
-  e.deleted.length ? `Clips this creator DELETED before (avoid these):\n- ${e.deleted.join('\n- ')}` : '',
+  e.kept.length ? `Clips this creator KEPT before, or that got the most real views (more like these):\n- ${e.kept.join('\n- ')}` : '',
+  e.deleted.length ? `Clips this creator DELETED before, or that got the fewest real views (avoid these):\n- ${e.deleted.join('\n- ')}` : '',
 ].filter(Boolean).join('\n\n')
 
 const RULES = 'Pick sentence ids from the transcript only — never invent timestamps. Each clip must be a complete thought that makes sense on its own. ' +

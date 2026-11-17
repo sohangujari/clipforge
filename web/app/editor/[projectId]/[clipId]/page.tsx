@@ -1,6 +1,6 @@
 import { Suspense } from 'react'
 import { notFound } from 'next/navigation'
-import { listClips, readSilences, readWords } from '@/lib/clip-views'
+import { listClips, readCuts, readSilences, readWords } from '@/lib/clip-views'
 import { getMockClips, mockProjects, type MockProject } from '@/lib/mock'
 import { getProject } from '@/lib/projects'
 import { EditorShell } from './EditorShell'
@@ -27,7 +27,8 @@ async function Editor({ params }: { params: Promise<{ projectId: string; clipId:
   const media = `/api/files/media/${projectId}`
   return <EditorShell project={project} clip={{ ...clip, transcript: words }} clips={clips}
     real={{ proxyUrl: `${media}/proxy.mp4`, trackUrl: `${media}/track.json`, peopleUrl: `${media}/people.json`, edit: clip.edit, keywords: clip.keywords, hook: clip.hook,
-      silences: readSilences(projectId).filter(([a, b]) => b > clip.startSec - 30 && a < clip.endSec + 30) }} />
+      silences: readSilences(projectId).filter(([a, b]) => b > clip.startSec - 30 && a < clip.endSec + 30),
+      cuts: readCuts(projectId), duration: project.durationSec, speakers: real.speakers ?? null }} />
 }
 
 export default function EditorPage({ params }: PageProps<'/editor/[projectId]/[clipId]'>) {

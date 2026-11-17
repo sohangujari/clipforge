@@ -275,3 +275,23 @@ def test_a_shot_with_no_face_shows_the_whole_frame_over_a_blur(conn, data_dir, c
     g = build_command(Path("s.mp4"), "o.mp4", edit(), [[0, 0.3, 0.4]], 1280, 720, 0.5, 4.5, None, "a.ass", "libx264", wide=[[1.0, 2.5], [9, 10]])
     g = g[g.index("-filter_complex") + 1]
     assert "boxblur" in g and "enable='between(t,0.5,2)'" in g  # clip-relative, and only the wide shot inside the clip
+
+
+def test_hand_framed_shot_and_speaker_colours_reach_the_export(conn, data_dir, clips, monkeypatch):
+    from clipforge_worker.stages import render as R
+    pid = project(conn, data_dir, clips)
+    md = data_dir / "media" / pid
+    (md / "track.json").write_text(json.dumps({"keyframes": [[0, 0.3, 0.4]], "wide": [[1.0, 2.5]]}))
+    words = [{**w, "speaker": i % 2} for i, w in enumerate(WORDS)]
+    (md / "transcript.json").write_text(json.dumps({"language": "en", "words": words}))
+    conn.execute("UPDATE Project SET speakers=? WHERE id=?", (json.dumps([{"name": "Asha", "color": "#112233"}]), pid))
+    cid = add_clip(conn, pid, edit(focus=[[1.0, 2.5, 0.8, 0.5]], speakerColors=True))
+    seen = {}
+    real_cmd, real_ass = R.build_command, R.build_ass
+    monkeypatch.setattr(R, "build_command", lambda *a, **k: (seen.update(kf=a[3], wide=k["wide"]), real_cmd(*a, **k))[1])
+    monkeypatch.setattr(R, "build_ass", lambda i: (seen.update(ass=real_ass(i)), seen["ass"])[1])
+    assert render(conn, pid, [cid])["status"] == "done"
+    assert seen["wide"] == []                                     # the framed shot is cropped, not shown whole
+    from clipforge_worker.clips.reframe import center_at
+    assert center_at(seen["kf"], 1.5) == (0.8, 0.5) and center_at(seen["kf"], 0.5) == (0.3, 0.4) and center_at(seen["kf"], 3) == (0.3, 0.4)
+    assert "\\1c&H332211&" in seen["ass"] and "\\1c&HF28D5B&" in seen["ass"]  # speaker 0 as picked, speaker 1 the default blue

@@ -7,6 +7,7 @@ import { getDb } from './db'
 import { dataDir } from './paths'
 import { CONTENT_TYPES, TONES } from './constants'
 import { CAPTION_SCRIPTS, VocabularySchema } from './settings'
+import { SpeakersSchema, type Speaker } from './speakers'
 
 export const ProjectSettingsSchema = z.object({
   clipCount: z.union([z.literal('auto'), z.number().int().min(3).max(20)]).default('auto'),
@@ -28,6 +29,7 @@ export interface ProjectView {
   id: string; title: string; sourceType: string; status: string; stage?: string; progress: number
   message?: string; error?: string; warning?: string; durationSec?: number; language?: string
   contentType: string; thumbnailUrl?: string; createdAt: string; hasTranscript: boolean; captionScript: string; clipCount: number; jobType: string
+  speakers?: Speaker[]
 }
 
 const mediaDir = (id: string) => join(/*turbopackIgnore: true*/ dataDir(), 'media', id)
@@ -52,6 +54,7 @@ function toView(p: NonNullable<Row>): ProjectView {
     captionScript: (JSON.parse(p.settings) as ProjectSettings).captionScript ?? 'native',
     clipCount: p._count.clips,
     jobType: job?.type ?? 'ingest',
+    speakers: p.speakers ? JSON.parse(p.speakers) : undefined,
   }
 }
 
@@ -116,6 +119,14 @@ export async function retryProject(id: string): Promise<ProjectView> {
   const db = getDb()
   await db.job.create({ data: { id: randomUUID(), projectId: id, stageDone: row.jobs[0]?.stageDone ?? '[]' } })
   await db.project.update({ where: { id }, data: { status: 'queued', warning: null } })
+  return (await getProject(id))!
+}
+
+/** Speaker names and colours for this video (editor). */
+export async function setSpeakers(id: string, raw: unknown): Promise<ProjectView> {
+  await mustLoad(id)
+  const speakers = SpeakersSchema.parse(raw)
+  await getDb().project.update({ where: { id }, data: { speakers: JSON.stringify(speakers) } })
   return (await getProject(id))!
 }
 

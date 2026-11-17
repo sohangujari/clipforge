@@ -100,6 +100,13 @@ def build_ass(i: dict) -> str:
         if sh["blur"]:
             fx += f"\\blur{_num(sh['blur'] / 4)}"
     primary, active = _tag(st["color"]), _tag(st["activeColor"])
+    sc = i.get("speakerColors") or None
+
+    def base(w: dict) -> str:
+        return _tag(sc[w["sp"] % len(sc)]) if sc and "sp" in w else primary
+
+    def plain(w: dict) -> str:
+        return f"{{\\1c{base(w)}}}{w['w']}" if sc else w["w"]
     per = st["wordsPerLine"] * st["lines"]
     events: list[str] = []
 
@@ -118,7 +125,7 @@ def build_ass(i: dict) -> str:
         cy = _round(H * m[2] / 100) if m else y
         pos = f"\\pos({x},{cy})"
         if anim in ("fade", "none"):
-            ev(chunk[0]["s"], hold, pos + fx + ("\\fad(120,120)" if anim == "fade" else ""), join([w["w"] for w in chunk]))
+            ev(chunk[0]["s"], hold, pos + fx + ("\\fad(120,120)" if anim == "fade" else ""), join([plain(w) for w in chunk]))
             continue
         for k, w in enumerate(chunk):
             end = chunk[k + 1]["s"] if k < len(chunk) - 1 else hold
@@ -126,11 +133,11 @@ def build_ass(i: dict) -> str:
             parts = []
             for j, sw in enumerate(shown):
                 if j != k:
-                    parts.append(sw["w"])
+                    parts.append(plain(sw))
                 elif anim == "pop":
-                    parts.append(f"{{\\1c{active}\\t(0,80,\\fscx118\\fscy118)\\t(80,160,\\fscx108\\fscy108)}}{sw['w']}{{\\1c{primary}\\fscx100\\fscy100}}")
+                    parts.append(f"{{\\1c{active}\\t(0,80,\\fscx118\\fscy118)\\t(80,160,\\fscx108\\fscy108)}}{sw['w']}{{\\1c{base(sw)}\\fscx100\\fscy100}}")
                 else:
-                    parts.append(f"{{\\1c{active}}}{sw['w']}{{\\1c{primary}}}")
+                    parts.append(f"{{\\1c{active}}}{sw['w']}{{\\1c{base(sw)}}}")
             at = f"\\move({x},{cy + _round(H * 0.02)},{x},{cy},0,150)" if anim == "slide" and k == 0 else pos
             ev(w["s"], end, at + fx, join(parts))
     if wm and wm.get("value"):

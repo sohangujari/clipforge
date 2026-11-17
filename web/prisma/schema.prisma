@@ -35,6 +35,7 @@ model Project {
   contentType String   @default("auto")
   settings    String // JSON ProjectSettings
   warning     String?
+  speakers    String? // [{name, color}] by speaker number (Phase 5: editable speaker names/colours)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
   jobs        Job[]
@@ -82,6 +83,7 @@ model Clip {
   status       String   @default("new") // new | kept | deleted
   hook         String? // on-screen hook line the AI wrote (shown over the first 3 s)
   keywords     String? // string[]: words the AI picked for zoom punch-ins
+  views        Int? // real views the creator typed in: the best and worst performers teach the highlight prompt
   edit         String? // ClipEdit JSON (lib/clip-edit.ts): the editor's choices, used by export
   createdAt    DateTime @default(now())
 

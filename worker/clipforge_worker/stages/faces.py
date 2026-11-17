@@ -130,5 +130,6 @@ def _detect(ctx) -> None:
     ctx.report(0.99, "Finding camera cuts")
     cuts = find_cuts(proxy)
     _write(md / "faces.json", {"fps": FPS, "w": v["width"], "h": v["height"], "frames": frames, "all": every, "cuts": cuts})
-    _write(md / "track.json", {"keyframes": smooth_track(frames, FPS, cuts), "wide": faceless_shots(frames, FPS, cuts)})  # sure faces only
+    _write(md / "track.json", {"keyframes": smooth_track(frames, FPS, cuts), "wide": faceless_shots(frames, FPS, cuts),  # sure faces only
+                                "fps": v["fps"]})  # the editor's frame step
     ctx.report(1.0)

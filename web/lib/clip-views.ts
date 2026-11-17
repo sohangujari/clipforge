@@ -13,7 +13,7 @@ import type { MockClip, Word } from './mock'
 export interface ClipView extends MockClip {
   status: 'new' | 'kept' | 'deleted'; source: 'auto' | 'search'; query?: string; thumbnailUrl?: string
   signals: Record<string, number>; signalsUsed: string[]; reasons: Record<string, string>; edit?: ClipEdit
-  hook?: string; keywords: string[]
+  hook?: string; keywords: string[]; views?: number
 }
 
 type Row = Awaited<ReturnType<ReturnType<typeof getDb>['clip']['findFirstOrThrow']>>
@@ -38,6 +38,13 @@ export function readSilences(projectId: string): Range[] {
   } catch { return [] }
 }
 
+/** Camera-cut times (faces.json, worker stages/faces.py): the editor frames by hand one shot at a time. */
+export function readCuts(projectId: string): number[] {
+  try {
+    return JSON.parse(readFileSync(join(/*turbopackIgnore: true*/ dataDir(), 'media', projectId, 'faces.json'), 'utf8')).cuts ?? []
+  } catch { return [] }
+}
+
 export function toClipView(r: Row, words: Word[]): ClipView {
   const b = JSON.parse(r.breakdown)
   const thumb = join(/*turbopackIgnore: true*/ dataDir(), 'media', r.projectId, 'clips', `${r.id}.jpg`)
@@ -51,7 +58,7 @@ export function toClipView(r: Row, words: Word[]): ClipView {
     status: r.status as ClipView['status'], source: r.source as ClipView['source'], query: r.query ?? undefined,
     thumbnailUrl: existsSync(thumb) ? `/api/files/media/${r.projectId}/clips/${r.id}.jpg` : undefined,
     edit: r.edit ? JSON.parse(r.edit) : undefined,
-    hook: r.hook ?? undefined, keywords: r.keywords ? JSON.parse(r.keywords) : [],
+    hook: r.hook ?? undefined, keywords: r.keywords ? JSON.parse(r.keywords) : [], views: r.views ?? undefined,
   }
 }
 
@@ -68,6 +75,12 @@ export async function getClip(id: string): Promise<ClipView | null> {
 
 export async function setClipEdit(id: string, edit: ClipEdit): Promise<ClipView | null> {
   const r = await getDb().clip.updateMany({ where: { id }, data: { edit: JSON.stringify(edit) } })
+  return r.count ? getClip(id) : null
+}
+
+/** Real views the creator typed in (null clears). The worker's taste learning reads them (clips/taste.py). */
+export async function setClipViews(id: string, views: number | null): Promise<ClipView | null> {
+  const r = await getDb().clip.updateMany({ where: { id }, data: { views } })
   return r.count ? getClip(id) : null
 }
 

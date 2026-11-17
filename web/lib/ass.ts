@@ -8,12 +8,14 @@ import type { SubtitleStyle } from './subtitle-presets'
 
 type Position = (typeof POSITIONS)[number]
 
-export interface AssWord { w: string; s: number; e: number }
+export interface AssWord { w: string; s: number; e: number; sp?: number }
 export interface AssWatermark { value: string; font: string; color: string; opacity: number; position: Position; marginPct: number; sizePct: number }
 export interface AssHook { text: string; end: number }
 export interface AssInput { style: SubtitleStyle; words: AssWord[]; width: number; height: number; duration: number; watermarkText?: AssWatermark | null; hook?: AssHook | null
   /** [start, end, y%]: while split/grid rows are on screen, subtitles sit on the divider between them */
-  middle?: [number, number, number][] }
+  middle?: [number, number, number][]
+  /** hex per speaker number: each word is drawn in its speaker's colour (the spoken word still turns activeColor) */
+  speakerColors?: string[] | null }
 
 export const FALLBACK_FONT = 'Noto Sans Devanagari'
 /** Every bundled font file. The preview preloads them all into libass (~1 MB), as FFmpeg's fontsdir does for the export, so both
@@ -86,6 +88,9 @@ export function buildAss(i: AssInput): string {
     if (st.shadow.blur) fx += `\\blur${num(st.shadow.blur / 4)}`
   }
   const primary = tag(st.color), active = tag(st.activeColor)
+  const sc = i.speakerColors?.length ? i.speakerColors : null
+  const base = (w: AssWord) => (sc && w.sp !== undefined ? tag(sc[w.sp % sc.length]) : primary)
+  const plain = (w: AssWord) => (sc ? `{\\1c${base(w)}}${w.w}` : w.w)
   const per = st.wordsPerLine * st.lines
   const events: string[] = []
   const join = (ws: string[]) => ws.map((w, k) => (k > 0 ? (st.lines === 2 && k === st.wordsPerLine ? '\\N' : ' ') : '') + w).join('')
@@ -99,15 +104,15 @@ export function buildAss(i: AssInput): string {
     const cy = m ? round((H * m[2]) / 100) : y
     const pos = `\\pos(${x},${cy})`
     if (st.animation === 'fade' || st.animation === 'none') {
-      ev(chunk[0].s, hold, pos + fx + (st.animation === 'fade' ? '\\fad(120,120)' : ''), join(chunk.map((w) => w.w)))
+      ev(chunk[0].s, hold, pos + fx + (st.animation === 'fade' ? '\\fad(120,120)' : ''), join(chunk.map(plain)))
       continue
     }
     chunk.forEach((w, k) => {
       const end = k < chunk.length - 1 ? chunk[k + 1].s : hold
       const shown = st.animation === 'typewriter' ? chunk.slice(0, k + 1) : chunk
-      const text = join(shown.map((sw, j) => j !== k ? sw.w
-        : st.animation === 'pop' ? `{\\1c${active}\\t(0,80,\\fscx118\\fscy118)\\t(80,160,\\fscx108\\fscy108)}${sw.w}{\\1c${primary}\\fscx100\\fscy100}`
-          : `{\\1c${active}}${sw.w}{\\1c${primary}}`))
+      const text = join(shown.map((sw, j) => j !== k ? plain(sw)
+        : st.animation === 'pop' ? `{\\1c${active}\\t(0,80,\\fscx118\\fscy118)\\t(80,160,\\fscx108\\fscy108)}${sw.w}{\\1c${base(sw)}\\fscx100\\fscy100}`
+          : `{\\1c${active}}${sw.w}{\\1c${base(sw)}}`))
       const at = st.animation === 'slide' && k === 0 ? `\\move(${x},${cy + round(H * 0.02)},${x},${cy},0,150)` : pos
       ev(w.s, end, at + fx, text)
     })

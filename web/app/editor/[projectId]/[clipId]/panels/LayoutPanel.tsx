@@ -10,6 +10,7 @@ import { PanelPreview } from '@/components/cf/PanelPreview'
 import { Segmented } from '@/components/cf/Segmented'
 import { LAYOUTS, layoutsFor } from '@/lib/layouts'
 import { SPEAKER_LAYOUTS } from '@/lib/people'
+import { withFocus } from '@/lib/editor'
 import { cn } from '@/lib/utils'
 import type { PanelProps } from './types'
 
@@ -46,7 +47,23 @@ function unavailable(id: string, people: PanelProps['people']): string | undefin
   if (id !== 'active-speaker' && !people.multi) return 'Needs 2+ people on screen together'
 }
 
-export function LayoutPanel({ state, set, project, preview, real, people }: PanelProps) {
+/** Shots framed by hand (drag in the canvas): put this one, or all of them, back on face tracking. */
+function Framing({ state, set, shot }: Pick<PanelProps, 'state' | 'set' | 'shot'>) {
+  const here = shot && state.focus.some(([a, b]) => a === shot[0] && b === shot[1])
+  return (
+    <Section title="Framing">
+      <p className="text-xs text-muted-foreground">Drag the video in the preview to reframe the camera shot that’s playing. Other shots keep following faces.</p>
+      {!!state.focus.length && (
+        <div className="flex flex-wrap gap-1.5">
+          {here && <Button size="sm" variant="secondary" onClick={() => set({ focus: withFocus(state.focus, shot!, null) })}>Back to auto for this shot</Button>}
+          <Button size="sm" variant="ghost" onClick={() => set({ focus: [] })}>Reset all ({state.focus.length})</Button>
+        </div>
+      )}
+    </Section>
+  )
+}
+
+export function LayoutPanel({ state, set, project, preview, real, people, shot }: PanelProps) {
   return (
     <div className="flex flex-col gap-6">
       <Section title={`Layouts for ${project.contentType}`}>
@@ -67,6 +84,7 @@ export function LayoutPanel({ state, set, project, preview, real, people }: Pane
           })}
         </div>
       </Section>
+      {real && (state.layoutId === 'single' || state.layoutId === 'active-speaker') && <Framing state={state} set={set} shot={shot} />}
       {real && <Templates state={state} set={set} />}
       <Section title="Platform safe zones">
         <Field label="Show where app buttons and captions will cover the video">

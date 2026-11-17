@@ -1,15 +1,20 @@
 'use client'
 import { useRef } from 'react'
+import { ChevronLeft, ChevronRight } from 'lucide-react'
 import { fmtDuration } from '@/lib/clips'
 import type { Word } from '@/lib/mock'
 import { keptDuration, type Range } from '@/lib/cuts'
+import type { Speaker } from '@/lib/speakers'
 
 const MIN_LEN = 5
-export const SPEAKER_COLORS = ['#F26B5B', '#5B8DF2', '#3FA796', '#E2B33C']
+const r3 = (n: number) => Math.round(n * 1000) / 1000
+/** m:ss.cc — precise enough to see a one-frame nudge */
+const precise = (t: number) => `${Math.floor(t / 60)}:${(t % 60).toFixed(2).padStart(5, '0')}`
 
 /** view = fixed window (the original clip plus context) so the scale doesn't shift while dragging. */
-export function Timeline({ trim, keep, view, words, t, onTrim, onSeek }: {
+export function Timeline({ trim, keep, view, words, t, frame, speakers, onTrim, onSeek }: {
   trim: { start: number; end: number }; keep?: Range[]; view: { start: number; end: number }; words: Word[]; t: number
+  /** one frame, in seconds */ frame: number; speakers: Speaker[]
   onTrim: (trim: { start: number; end: number }) => void; onSeek: (t: number) => void
 }) {
   const ref = useRef<HTMLDivElement>(null)
@@ -28,6 +33,26 @@ export function Timeline({ trim, keep, view, words, t, onTrim, onSeek }: {
     const up = () => { window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', up) }
     window.addEventListener('pointermove', move); window.addEventListener('pointerup', up)
   }
+  /** Moves one edge by d seconds, keeping the clip at least MIN_LEN long and inside the view. */
+  const nudge = (edge: 'start' | 'end', d: number) => {
+    const v = r3(trim[edge] + d)
+    onTrim(edge === 'start' ? { ...trim, start: Math.max(v0, Math.min(v, trim.end - MIN_LEN)) } : { ...trim, end: Math.min(v1, Math.max(v, trim.start + MIN_LEN)) })
+  }
+  const keys = (edge: 'start' | 'end') => (e: React.KeyboardEvent) => {
+    if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return
+    e.preventDefault(); e.stopPropagation()
+    nudge(edge, (e.key === 'ArrowLeft' ? -1 : 1) * (e.shiftKey ? 1 : frame))
+  }
+  const nudger = (edge: 'start' | 'end', label: string) => (
+    <span className="flex items-center gap-0.5">
+      <span className="mr-1 text-muted-foreground">{label}</span>
+      <button type="button" aria-label={`${label} one frame earlier`} title="One frame earlier (shift: 1 s)" onClick={(e) => nudge(edge, e.shiftKey ? -1 : -frame)}
+        className="rounded p-0.5 hover:bg-muted"><ChevronLeft className="size-3.5" /></button>
+      <span data-testid={`trim-${edge}`} className="w-14 text-center font-medium tabular-nums">{precise(trim[edge])}</span>
+      <button type="button" aria-label={`${label} one frame later`} title="One frame later (shift: 1 s)" onClick={(e) => nudge(edge, e.shiftKey ? 1 : frame)}
+        className="rounded p-0.5 hover:bg-muted"><ChevronRight className="size-3.5" /></button>
+    </span>
+  )
   const runs = words.reduce<{ speaker: number; s: number; e: number }[]>((acc, w) => {
     const last = acc[acc.length - 1]
     if (last && last.speaker === (w.speaker ?? 0)) last.e = w.e
@@ -43,9 +68,9 @@ export function Timeline({ trim, keep, view, words, t, onTrim, onSeek }: {
       <div ref={ref} className="relative h-10 cursor-pointer select-none rounded-lg bg-muted" onPointerDown={(e) => onSeek(timeAt(e.clientX))}>
         {words.map((w, i) => <span key={i} className="absolute top-3 h-4 w-px bg-muted-foreground/30" style={{ left: x(w.s) }} />)}
         <div className="absolute inset-y-0 rounded-lg border-2 border-cf-accent bg-cf-accent/10" style={{ left: x(trim.start), width: `calc(${x(trim.end)} - ${x(trim.start)})` }}>
-          <span role="slider" aria-label="Trim start" aria-valuenow={trim.start} tabIndex={0} onPointerDown={(e) => drag('start', e)}
+          <span role="slider" aria-label="Trim start" aria-valuenow={trim.start} tabIndex={0} onPointerDown={(e) => drag('start', e)} onKeyDown={keys('start')}
             className="absolute -left-1.5 inset-y-0 w-3 cursor-ew-resize rounded bg-cf-accent" />
-          <span role="slider" aria-label="Trim end" aria-valuenow={trim.end} tabIndex={0} onPointerDown={(e) => drag('end', e)}
+          <span role="slider" aria-label="Trim end" aria-valuenow={trim.end} tabIndex={0} onPointerDown={(e) => drag('end', e)} onKeyDown={keys('end')}
             className="absolute -right-1.5 inset-y-0 w-3 cursor-ew-resize rounded bg-cf-accent" />
         </div>
         {keep?.slice(1).map(([a], i) => { const b = keep[i][1] // the gap before each kept part: removed pause or filler
@@ -53,7 +78,12 @@ export function Timeline({ trim, keep, view, words, t, onTrim, onSeek }: {
         <span className="pointer-events-none absolute -inset-y-1 w-0.5 rounded bg-foreground" style={{ left: x(t) }} />
       </div>
       <div className="relative h-2.5" aria-label="Speaker track">
-        {runs.map((r, i) => <span key={i} className="absolute inset-y-0 rounded-full" style={{ left: x(r.s), width: `calc(${x(r.e)} - ${x(r.s)})`, background: SPEAKER_COLORS[r.speaker % 4] }} title={`Speaker ${r.speaker + 1}`} />)}
+        {runs.map((r, i) => <span key={i} className="absolute inset-y-0 rounded-full" style={{ left: x(r.s), width: `calc(${x(r.e)} - ${x(r.s)})`, background: speakers[r.speaker]?.color ?? '#a1a1aa' }} title={speakers[r.speaker]?.name ?? `Speaker ${r.speaker + 1}`} />)}
+      </div>
+      <div className="flex items-center justify-between text-[11px]">
+        {nudger('start', 'Start')}
+        <span className="hidden text-muted-foreground xl:inline">Space play · ←/→ one frame · ⇧ one second</span>
+        {nudger('end', 'End')}
       </div>
     </div>
   )

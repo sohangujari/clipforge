@@ -21,7 +21,7 @@ async function defaultEdit(clip: ClipRow, resolution: ClipEdit['resolution']): P
   const trim = { start: clip.startSec, end: clip.endSec }
   const words = readWords(clip.projectId).filter((w) => w.s >= trim.start - 0.05 && w.e <= trim.end + 0.05)
   const on = { removeFillers: true, removePauses: true, autoZoom: true }
-  return { aspect: '9:16', layoutId: defaultLayout(readPeople(clip.projectId)), style, subtitlesOn: true, watermarkOn: true, brand, trim, resolution, ...on, bumpers: true,
+  return { aspect: '9:16', layoutId: defaultLayout(readPeople(clip.projectId)), style, subtitlesOn: true, watermarkOn: true, brand, trim, resolution, ...on, bumpers: true, cuts: [], focus: [], speakerColors: false,
     hook: { on: false, text: clip.hook ?? JSON.parse(clip.titles)[0] ?? '' }, // off unless switched on: a text box over the opening covers the speaker
     ...derive({ trim, words, ...on }, { silences: readSilences(clip.projectId), keywords: clip.keywords ? JSON.parse(clip.keywords) : [] }) }
 }

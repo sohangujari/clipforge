@@ -1,5 +1,5 @@
 'use client'
-import { useMemo, type RefObject } from 'react'
+import { useMemo, useRef, useState, type RefObject } from 'react'
 import { AssOverlay } from '@/components/cf/AssOverlay'
 import { ClipVideo, type RealLayout } from '@/components/cf/ClipVideo'
 import { buildAss } from '@/lib/ass'
@@ -7,8 +7,8 @@ import { keptDuration, middleRanges, retimeWords, type Range } from '@/lib/cuts'
 import type { People } from '@/lib/people'
 
 const NO_ZOOM: Range[] = []
-import { outputSize, type Keyframe } from '@/lib/reframe'
-import { ASPECT_RATIO, chunkAt, type EditorState, type SafeZone } from '@/lib/editor'
+import { applyFocus, centerAt, cropRect, minusFocus, outputSize, type Keyframe } from '@/lib/reframe'
+import { ASPECT_RATIO, chunkAt, withFocus, type EditorState, type SafeZone } from '@/lib/editor'
 import { LAYOUTS, type ThumbRect } from '@/lib/layouts'
 import { positionStyle } from '@/components/cf/PositionGrid'
 import { SubtitleLine } from '@/components/cf/SubtitleLine'
@@ -38,7 +38,8 @@ function Region({ r, thumbnail }: { r: ThumbRect; thumbnail: string }) {
   )
 }
 
-export interface RealMedia { src: string; track: Keyframe[]; playing: boolean; onTime: (t: number) => void; videoRef: RefObject<HTMLVideoElement | null>; keep: Range[]; zooms: Range[]; people: People | null; wide: Range[] }
+export interface RealMedia { src: string; track: Keyframe[]; playing: boolean; onTime: (t: number) => void; videoRef: RefObject<HTMLVideoElement | null>; keep: Range[]; zooms: Range[]; people: People | null; wide: Range[]
+  speakerColors: string[]; shotAt: (t: number) => [number, number]; onFocus: (shot: [number, number], x: number, y: number) => void }
 
 export const HOOK_S = 3 // the hook line shows over the first seconds (worker/clipforge_worker/stages/render.py)
 
@@ -48,7 +49,7 @@ export function rowsFor(state: EditorState, people: People | null) {
   return people && (state.layoutId === 'split' || state.layoutId === 'grid') ? { plan: people[state.layoutId], faceH: people.faceH } : null
 }
 
-export function assFor(state: EditorState, keep: Range[], people: People | null = null): string {
+export function assFor(state: EditorState, keep: Range[], people: People | null = null, speakerColors: string[] | null = null): string {
   const { start, end } = state.trim
   const b = state.brand
   const text = state.watermarkOn && !b.logoPath && b.text?.value
@@ -57,6 +58,7 @@ export function assFor(state: EditorState, keep: Range[], people: People | null 
     style: state.style, width, height, duration: keptDuration(keep),
     words: state.subtitlesOn ? retimeWords(state.words.filter((w) => w.s >= start - 0.05 && w.e <= end + 0.05), keep) : [],
     hook: state.hook.on && state.hook.text ? { text: state.hook.text, end: HOOK_S } : null,
+    speakerColors: state.speakerColors ? speakerColors : null,
     middle: middleRanges((rowsFor(state, people)?.plan.ranges ?? []).filter(([a, b]) => b > start && a < end), keep, state.aspect !== '16:9'),
     watermarkText: text ? { value: b.text!.value, font: b.text!.font, color: b.text!.color, opacity: (b.opacity * b.text!.opacity) / 100, position: b.position, marginPct: b.marginPct, sizePct: b.sizePct } : null,
   })
@@ -69,18 +71,54 @@ export function CanvasFrame({ state, t, thumbnail, className, testIds = true, re
   const chunk = chunkAt(state.words, state.style.wordsPerLine * state.style.lines, t)
   const b = state.brand
   const logoSrc = b.logoPath ? `/api/files/${b.logoPath}` : null
-  const ass = useMemo(() => (real ? assFor(state, real.keep, real.people) : ''), [real, state])
+  const ass = useMemo(() => (real ? assFor(state, real.keep, real.people, real.speakerColors) : ''), [real, state])
   const speakerLayout = real?.people && ['active-speaker', 'split', 'grid'].includes(state.layoutId)
   const zoomable = state.layoutId === 'single' || state.layoutId === 'active-speaker'
+
+  // Reframe by hand: drag the picture to move the crop for the camera shot under the playhead.
+  const drag = useRef<{ x0: number; y0: number; cx: number; cy: number; sx: number; sy: number; lo: [number, number]; shot: [number, number] } | null>(null)
+  const [live, setLive] = useState<{ shot: [number, number]; x: number; y: number } | null>(null)
+  const focus = useMemo(() => (live ? withFocus(state.focus, live.shot, live.x, live.y) : state.focus), [live, state.focus])
+  const baseTrack = speakerLayout ? real!.people!.track : real?.track
+  const track = useMemo(() => (baseTrack && zoomable ? applyFocus(baseTrack, focus) : baseTrack), [baseTrack, zoomable, focus])
+  const wide = useMemo(() => (real && zoomable ? minusFocus(real.wide, focus) : real?.wide), [real, zoomable, focus])
+  const shotNow = real && zoomable ? real.shotAt(t) : null
+  const framed = shotNow && state.focus.some(([a, b]) => a === shotNow[0] && b === shotNow[1])
+  const down = (e: React.PointerEvent<HTMLDivElement>) => {
+    const v = real?.videoRef.current
+    if (!real || !track || !v?.videoWidth || e.button !== 0) return
+    const [cx, cy] = centerAt(track, v.currentTime)
+    const [, , w, h] = cropRect(cx, cy, v.videoWidth, v.videoHeight, ASPECT_RATIO[state.aspect])
+    const r = e.currentTarget.getBoundingClientRect()
+    const lo: [number, number] = [w / v.videoWidth / 2, h / v.videoHeight / 2] // past this the crop is at the frame's edge
+    drag.current = { x0: e.clientX, y0: e.clientY, cx, cy, sx: w / v.videoWidth / r.width, sy: h / v.videoHeight / r.height, lo, shot: real.shotAt(v.currentTime) }
+    e.currentTarget.setPointerCapture(e.pointerId)
+  }
+  const move = (e: React.PointerEvent) => {
+    const d = drag.current
+    if (!d || (Math.abs(e.clientX - d.x0) < 3 && Math.abs(e.clientY - d.y0) < 3 && !live)) return
+    const clamp = (n: number, lo: number) => Math.min(Math.max(n, lo), 1 - lo)
+    setLive({ shot: d.shot, x: clamp(d.cx - (e.clientX - d.x0) * d.sx, d.lo[0]), y: clamp(d.cy - (e.clientY - d.y0) * d.sy, d.lo[1]) })
+  }
+  const up = () => {
+    if (live) real?.onFocus(live.shot, live.x, live.y)
+    drag.current = null
+    setLive(null)
+  }
   return (
     <div data-testid={testIds ? 'canvas-frame' : undefined} className={cn('relative overflow-hidden rounded-xl bg-black shadow-cf [container-type:inline-size]', className)}
       style={{ aspectRatio: ASPECT_RATIO[state.aspect] }}>
       {real ? (
         <>
-          <ClipVideo src={real.src} track={speakerLayout ? real.people!.track : real.track} aspect={state.aspect} layout={state.layoutId as RealLayout}
-            keep={real.keep} zooms={zoomable ? real.zooms : NO_ZOOM} rows={rowsFor(state, real.people)} wide={real.wide}
+          <ClipVideo src={real.src} track={track!} aspect={state.aspect} layout={state.layoutId as RealLayout}
+            keep={real.keep} zooms={zoomable ? real.zooms : NO_ZOOM} rows={rowsFor(state, real.people)} wide={wide}
             t={t} playing={real.playing} onTime={real.onTime} videoRef={real.videoRef} />
           <AssOverlay ass={ass} videoRef={real.videoRef} keep={real.keep} />
+          {testIds && zoomable && (
+            <div data-testid="reframe-surface" title="Drag to reframe this camera shot" className="absolute inset-0 cursor-grab touch-none active:cursor-grabbing"
+              onPointerDown={down} onPointerMove={move} onPointerUp={up} onPointerCancel={up} />
+          )}
+          {testIds && framed && <span data-testid="manual-framing" className="pointer-events-none absolute left-2 top-2 rounded-full bg-black/60 px-2 py-0.5 text-[10px] font-medium text-white">Framed by hand</span>}
         </>
       ) : layout.thumb.map((r, i) => <Region key={i} r={r} thumbnail={thumbnail} />)}
       {!real && state.subtitlesOn && chunk.words.length > 0 && (

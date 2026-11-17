@@ -1,5 +1,7 @@
 import type { LayoutId } from './layouts'
 import type { Word } from './mock'
+import type { Range } from './cuts'
+import type { Focus } from './reframe'
 import type { SettingValue } from './settings'
 import type { SubtitleStyle } from './subtitle-presets'
 
@@ -24,6 +26,12 @@ export interface EditorState {
   autoZoom: boolean
   hook: { on: boolean; text: string }
   bumpers: boolean
+  /** parts cut out in the transcript panel (source time) */
+  cuts: Range[]
+  /** camera shots framed by hand (drag in the canvas) */
+  focus: Focus[]
+  /** subtitle words in their speaker's colour */
+  speakerColors: boolean
 }
 
 export const ASPECT_RATIO: Record<Aspect, number> = { '9:16': 9 / 16, '1:1': 1, '16:9': 16 / 9 }
@@ -36,4 +44,20 @@ export function chunkAt(words: Word[], perChunk: number, t: number): { words: Wo
   if (!speaking) i = t < words[0].s ? 0 : words.findLastIndex((w) => w.s <= t)
   const start = Math.floor(i / perChunk) * perChunk
   return { words: words.slice(start, start + perChunk), active: speaking ? i - start : -1 }
+}
+
+/** The camera shot playing at t: [last cut ≤ t, next cut] (cuts sorted; the video's own ends otherwise). */
+export function shotAt(cuts: number[], duration: number, t: number): [number, number] {
+  let a = 0
+  for (const c of cuts) {
+    if (c > t) return [a, c]
+    a = c
+  }
+  return [a, duration]
+}
+
+/** state.focus with shot [a, b] framed at (x, y), or back to auto tracking (x = null). */
+export function withFocus(focus: EditorState['focus'], [a, b]: [number, number], x: number | null, y = 0.5): EditorState['focus'] {
+  const rest = focus.filter(([s, e]) => e <= a || s >= b)
+  return x === null ? rest : [...rest, [a, b, Math.round(x * 10000) / 10000, Math.round(y * 10000) / 10000]].sort((p, q) => p[0] - q[0]) as EditorState['focus']
 }

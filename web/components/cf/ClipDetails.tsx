@@ -1,6 +1,8 @@
 'use client'
 import { useState } from 'react'
+import { toast } from 'sonner'
 import { Copy, Loader2, RefreshCw, Sparkles } from 'lucide-react'
+import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { ExportButton } from './ExportButton'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
@@ -9,7 +11,7 @@ import type { MockClip } from '@/lib/mock'
 import { ScoreBadge } from './ScoreBadge'
 
 export type RegenField = 'titles' | 'descriptions' | 'hashtags'
-type DetailClip = MockClip & { reasons?: Record<string, string> }
+type DetailClip = MockClip & { reasons?: Record<string, string>; views?: number }
 
 const DIMS: [string, string][] = [
   ['hook', 'Hook (first 3s)'], ['emotion', 'Emotional impact'], ['value', 'Value / shareability'], ['pacing', 'Pacing & clarity'], ['trend', 'Trend (estimate)'],
@@ -37,6 +39,28 @@ function Field({ label, text, regen, onRegen, children, testId }: {
   )
 }
 
+/** Real views after posting: the best and worst performers teach the next clip search what works for this creator. */
+function Views({ clip }: { clip: DetailClip }) {
+  const [v, setV] = useState(clip.views?.toString() ?? '')
+  const [savedV, setSavedV] = useState(clip.views?.toString() ?? '')
+  const save = async () => {
+    const n = v.replace(/[,\s_]/g, '')
+    if (n === savedV) return
+    if (n && !/^\d+$/.test(n)) return toast.error('Type the view count as a number')
+    const r = await fetch(`/api/clips/${clip.id}`, { method: 'PATCH', body: JSON.stringify({ views: n ? Number(n) : null }) })
+    if (!r.ok) return toast.error("Couldn't save the views")
+    setSavedV(n)
+    toast.success(n ? 'Views saved — future clip finding learns from them' : 'Views cleared')
+  }
+  return (
+    <label className="flex items-center gap-3 text-xs text-muted-foreground">
+      <span className="w-36 shrink-0">Real views (after posting)</span>
+      <Input aria-label="Real views" inputMode="numeric" placeholder="e.g. 12400" value={v} className="h-8"
+        onChange={(e) => setV(e.target.value)} onBlur={save} onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur() }} />
+    </label>
+  )
+}
+
 export function ClipDetails({ clip, onRegenerate, tasteCount }: { clip: DetailClip; onRegenerate?: (f: RegenField) => Promise<void>; tasteCount?: number }) {
   const extras = Object.entries(clip.breakdown.extra ?? {})
   const reasons = clip.reasons ?? {}
@@ -45,6 +69,7 @@ export function ClipDetails({ clip, onRegenerate, tasteCount }: { clip: DetailCl
     <div className="flex flex-col gap-5">
       <div className="flex items-center gap-3"><ScoreBadge score={clip.score} className="h-9 min-w-12 text-base" /><p className="text-sm text-muted-foreground">{clip.reason}</p></div>
       {'status' in clip && <ExportButton clipId={clip.id} projectId={clip.projectId} resolution="1080p" />}
+      {'status' in clip && <Views key={clip.id} clip={clip} />}
       {!!tasteCount && <p className="flex items-center gap-1.5 text-xs text-muted-foreground"><Sparkles className="size-3.5 text-cf-accent" />Learned from {tasteCount} of your keep/delete choices</p>}
       <div className="flex flex-col gap-2.5">
         {[...DIMS, ...extras.map(([k]) => [k, k[0].toUpperCase() + k.slice(1)] as [string, string])].map(([k, label]) => (

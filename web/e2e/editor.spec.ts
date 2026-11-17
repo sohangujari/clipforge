@@ -6,7 +6,7 @@ test.use({ viewport: { width: 1440, height: 900 } })
 
 test('rail order', async ({ page }) => {
   await page.goto(PODCAST)
-  await expect(page.getByTestId('rail').getByRole('button')).toHaveText(['Clips', 'Layout', 'Subtitles', 'Branding', 'AI', 'Export', 'Settings'])
+  await expect(page.getByTestId('rail').getByRole('button')).toHaveText(['Clips', 'Transcript', 'Layout', 'Subtitles', 'Branding', 'AI', 'Export', 'Settings'])
 })
 
 test('undo redo', async ({ page }) => {

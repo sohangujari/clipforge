@@ -1,9 +1,10 @@
 'use client'
-import { Download, Film, LayoutPanelTop, Palette, Settings, Sparkles, Type } from 'lucide-react'
+import { Download, FileText, Film, LayoutPanelTop, Palette, Settings, Sparkles, Type } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 export const SECTIONS = [
   { id: 'clips', label: 'Clips', icon: Film },
+  { id: 'transcript', label: 'Transcript', icon: FileText },
   { id: 'layout', label: 'Layout', icon: LayoutPanelTop },
   { id: 'subtitles', label: 'Subtitles', icon: Type },
   { id: 'branding', label: 'Branding', icon: Palette },
